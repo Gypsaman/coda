@@ -74,10 +74,10 @@ def run_pipeline(case_id: str, dry_run: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Full Pipeline")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "all"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "all"])
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    cases = ["a", "b", "c"] if args.case == "all" else [args.case]
+    cases = ["a", "b", "c", "d", "e"] if args.case == "all" else [args.case]
     for case_id in cases:
         run_pipeline(case_id, dry_run=args.dry_run)

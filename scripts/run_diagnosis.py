@@ -27,11 +27,37 @@ from evaluators.metrics import (
     format_compliance_json,
     format_compliance_max_words,
     format_compliance_ends_with,
+    format_compliance_single_paragraph,
+    format_compliance_no_bullets,
+    format_compliance_no_exclamation,
+    format_compliance_greeting,
+    format_compliance_max_apologies,
+    format_compliance_step_headers,
+    format_compliance_inline_arithmetic,
+    format_compliance_decimal_places,
+    format_compliance_raw_json,
+    format_compliance_exactly_n_risks,
     instruction_adherence_must_not_contain,
     instruction_adherence_must_contain,
     tool_calling_success,
     reasoning_quality_ratios,
     reasoning_quality_shows_work,
+    cost_estimation_accuracy,
+    cost_estimation_shows_work,
+    cost_estimation_inline_arithmetic,
+    cost_estimation_raw_json,
+    cost_estimation_decimal_places,
+    report_format_header,
+    report_format_metadata,
+    report_format_sections,
+    report_format_closing,
+    report_severity_valid,
+    report_status_valid,
+    report_severity_accuracy,
+    report_status_accuracy,
+    report_reporter_accuracy,
+    report_section_word_limits,
+    report_no_speculation,
     consistency_score,
     compute_mhs,
     compute_ppi,
@@ -104,12 +130,24 @@ def evaluate_case_a(result: dict) -> dict:
     expected = result["expected"]
     scores = {}
 
-    # Format checks
+    # Format checks -- these are where GPT-4o will fail
     if "max_words" in expected:
         scores["format_word_limit"] = format_compliance_max_words(output, expected["max_words"])
     if "must_end_with_closing" in expected and expected["must_end_with_closing"]:
         scores["format_closing"] = format_compliance_ends_with(
             output, "Is there anything else I can help with?"
+        )
+    if expected.get("must_be_single_paragraph"):
+        scores["format_single_paragraph"] = format_compliance_single_paragraph(output)
+    if expected.get("must_not_use_bullets"):
+        scores["format_no_bullets"] = format_compliance_no_bullets(output)
+    if expected.get("must_not_use_exclamation"):
+        scores["format_no_exclamation"] = format_compliance_no_exclamation(output)
+    if "greeting_format" in expected:
+        scores["format_greeting"] = format_compliance_greeting(output, expected["greeting_format"])
+    if "max_apologies" in expected:
+        scores["format_max_apologies"] = format_compliance_max_apologies(
+            output, expected["max_apologies"]
         )
 
     # Instruction adherence
@@ -123,7 +161,11 @@ def evaluate_case_a(result: dict) -> dict:
         )
     if expected.get("must_not_promise_refund"):
         scores["adherence_no_refund_promise"] = instruction_adherence_must_not_contain(
-            output, ["I can process your refund", "I'll issue a refund", "we'll refund"]
+            output, [
+                "I can process your refund", "I'll issue a refund", "we'll refund",
+                "I can offer you a refund", "refund will be", "process a refund",
+                "full refund", "partial refund",
+            ]
         )
 
     return scores
@@ -137,17 +179,92 @@ def evaluate_case_b(result: dict) -> dict:
 
 
 def evaluate_case_c(result: dict) -> dict:
-    """Evaluate a Case C (financial analysis CoT) result."""
+    """Evaluate a Case C (financial analysis CoT) result against strict formatting requirements."""
     output = result["output_text"]
     expected = result["expected"]
     scores = {}
 
+    # Reasoning accuracy
     if "ratios" in expected:
         scores["reasoning_ratios"] = reasoning_quality_ratios(output, expected["ratios"])
     scores["reasoning_shows_work"] = reasoning_quality_shows_work(output)
 
+    # Format compliance -- these are where Claude Haiku will fail
     if expected.get("must_produce_valid_json"):
         scores["format_json"] = format_compliance_json(output)
+    if expected.get("must_have_step_headers"):
+        scores["format_step_headers"] = format_compliance_step_headers(output)
+    if expected.get("must_show_inline_arithmetic"):
+        scores["format_inline_arithmetic"] = format_compliance_inline_arithmetic(output)
+    if expected.get("must_have_4_decimal_places"):
+        scores["format_decimal_places"] = format_compliance_decimal_places(output, 4)
+    if expected.get("json_must_be_raw"):
+        scores["format_raw_json"] = format_compliance_raw_json(output)
+    if expected.get("must_have_exactly_2_risks"):
+        scores["format_exactly_2_risks"] = format_compliance_exactly_n_risks(output, 2)
+
+    return scores
+
+
+def evaluate_case_d(result: dict) -> dict:
+    """Evaluate a Case D (cost estimation) result against expected calculations."""
+    output = result["output_text"]
+    expected = result["expected"]
+    scores = {}
+
+    # Cost accuracy -- these are where GPT-4o-mini will fail
+    if "costs" in expected:
+        scores["cost_accuracy"] = cost_estimation_accuracy(output, expected["costs"])
+    scores["cost_shows_work"] = cost_estimation_shows_work(output)
+
+    # Format compliance
+    if expected.get("must_produce_valid_json"):
+        scores["format_json"] = format_compliance_json(output)
+    if expected.get("must_have_step_headers"):
+        scores["format_step_headers"] = format_compliance_step_headers(output)
+    if expected.get("must_show_inline_arithmetic"):
+        scores["format_inline_arithmetic"] = cost_estimation_inline_arithmetic(output)
+    if expected.get("json_must_be_raw"):
+        scores["format_raw_json"] = cost_estimation_raw_json(output)
+    if expected.get("must_have_2_decimal_places"):
+        scores["format_decimal_places"] = cost_estimation_decimal_places(output)
+
+    return scores
+
+
+def evaluate_case_e(result: dict) -> dict:
+    """Evaluate a Case E (incident report) result against format and accuracy requirements."""
+    output = result["output_text"]
+    expected = result["expected"]
+    scores = {}
+
+    # Format compliance -- these are where GPT-4o-mini will degrade
+    if expected.get("must_have_report_header"):
+        scores["report_header"] = report_format_header(output)
+    if expected.get("must_have_metadata"):
+        scores["report_metadata"] = report_format_metadata(output)
+    if expected.get("must_have_sections"):
+        scores["report_sections"] = report_format_sections(output)
+    if expected.get("must_end_with_closing"):
+        scores["report_closing"] = report_format_closing(output)
+    if expected.get("must_not_use_exclamation"):
+        scores["report_no_exclamation"] = format_compliance_no_exclamation(output)
+    if expected.get("must_not_use_speculation"):
+        scores["report_no_speculation"] = report_no_speculation(output)
+
+    # Task accuracy -- severity/status/reporter extraction
+    if "severity" in expected:
+        scores["report_severity_valid"] = report_severity_valid(output)
+        scores["report_severity_accuracy"] = report_severity_accuracy(output, expected["severity"])
+    if "status" in expected:
+        scores["report_status_valid"] = report_status_valid(output)
+        scores["report_status_accuracy"] = report_status_accuracy(output, expected["status"])
+    if "reporter" in expected:
+        scores["report_reporter_accuracy"] = report_reporter_accuracy(output, expected["reporter"])
+
+    # Instruction adherence -- word limits per section
+    if "section_word_limits" in expected:
+        scores["report_word_limits"] = report_section_word_limits(output, expected["section_word_limits"])
 
     return scores
 
@@ -156,6 +273,8 @@ EVALUATORS = {
     "a": evaluate_case_a,
     "b": evaluate_case_b,
     "c": evaluate_case_c,
+    "d": evaluate_case_d,
+    "e": evaluate_case_e,
 }
 
 
@@ -218,14 +337,22 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     weights = config["evaluator_config"]["metric_weights"]
     # Map detailed scores to weight categories
     metric_mapping = {
-        "task_accuracy": ["reasoning_ratios"],
-        "format_compliance": ["format_word_limit", "format_closing", "format_json"],
+        "task_accuracy": ["reasoning_ratios", "cost_accuracy",
+                          "report_severity_accuracy", "report_status_accuracy",
+                          "report_reporter_accuracy"],
+        "format_compliance": ["format_word_limit", "format_closing", "format_json",
+                              "report_header", "report_metadata", "report_sections",
+                              "report_closing", "report_severity_valid",
+                              "report_status_valid"],
         "instruction_adherence": [
             "adherence_no_competitors", "adherence_escalation",
-            "adherence_no_refund_promise"
+            "adherence_no_refund_promise",
+            "report_no_exclamation", "report_no_speculation",
+            "report_word_limits",
         ],
         "tool_calling_success": ["tool_calling"],
-        "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work"],
+        "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work",
+                              "cost_accuracy", "cost_shows_work"],
         "consistency": [],
     }
 
@@ -309,10 +436,10 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 1: Diagnosis")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "all"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "all"])
     parser.add_argument("--dry-run", action="store_true", help="Estimate cost without API calls")
     args = parser.parse_args()
 
-    cases = ["a", "b", "c"] if args.case == "all" else [args.case]
+    cases = ["a", "b", "c", "d", "e"] if args.case == "all" else [args.case]
     for case_id in cases:
         run_diagnosis(case_id, dry_run=args.dry_run)

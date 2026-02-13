@@ -1,3 +1,5 @@
 venv/
 .env
 results/
+paper_draft.md
+CLAUDE.md

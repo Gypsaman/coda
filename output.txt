@@ -1,0 +1,203 @@
+############################################################
+# CODA FULL PIPELINE - Case A
+# Started: 2026-02-12T19:03:52.287791
+############################################################
+
+============================================================
+CODA Phase 1: DIAGNOSE - Case A
+  System Prompt Migration: Customer service agent migrated from GPT-4 to GPT-4o
+  Old model: openai/gpt-4
+  New model: openai/gpt-4o
+  Test cases: 20
+============================================================
+
+Running baseline (old model)...
+Baseline: 100%|█████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [01:13<00:00,  3.70s/it]
+
+Running new model...
+New model: 100%|████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:36<00:00,  1.82s/it]
+
+============================================================
+DIAGNOSIS COMPLETE
+============================================================
+  MHS (baseline):  0.9537
+  MHS (new model): 0.9769
+  PPI:             102.4
+  Triage zone:     GREEN
+  Flagged metrics: 0
+
+  Results saved to: /home/cesar/coda/results/case_a/20260212_190352
+
+PPI is 102.4 (GREEN zone). No optimization needed.
+Pipeline complete.
+
+############################################################
+# CODA FULL PIPELINE - Case B
+# Started: 2026-02-12T19:05:42.574632
+############################################################
+
+============================================================
+CODA Phase 1: DIAGNOSE - Case B
+  Tool-Calling Capability Shift: Search/DB agent migrated from Claude Sonnet 4 to Claude Haiku 4.5
+  Old model: anthropic/claude-sonnet-4-20250514
+  New model: anthropic/claude-haiku-4-5-20251001
+  Test cases: 20
+============================================================
+
+Running baseline (old model)...
+Baseline: 100%|█████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:47<00:00,  2.39s/it]
+
+Running new model...
+New model: 100%|████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:22<00:00,  1.12s/it]
+
+============================================================
+DIAGNOSIS COMPLETE
+============================================================
+  MHS (baseline):  0.5500
+  MHS (new model): 0.5000
+  PPI:             90.9
+  Triage zone:     ORANGE
+  Flagged metrics: 1
+    - tool_calling: 0.550 -> 0.500 (9.1% decline)
+
+  Results saved to: /home/cesar/coda/results/case_b/20260212_190542
+
+============================================================
+CODA Phase 2: CLASSIFY - Case B
+  PPI: 90.9 (ORANGE zone)
+  Flagged degradations: 1
+============================================================
+
+Classifying 1 failure cases...
+Classifying: 100%|████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:28<00:00, 28.82s/it]
+
+============================================================
+CLASSIFICATION COMPLETE
+============================================================
+  Failures classified: 1
+  Category frequency:
+    - tool_calling: 1
+    - instruction_drift: 1
+
+  Prioritized actions:
+    1. [tool_calling] score=3.0, freq=1
+       Fix: Ensure the model defaults to 'query_database' for queries that mention 'our' or ...
+    1. [instruction_drift] score=3.0, freq=1
+       Fix: No suggestion...
+
+  Report saved to: /home/cesar/coda/results/case_b/20260212_190542/classification_report.json
+
+============================================================
+CODA Phase 3: OPTIMIZE - Case B
+  Zone: ORANGE
+  Primary failure: tool_calling
+============================================================
+
+Computing baseline score on new model...
+  Baseline score: 0.0000
+
+--- Iteration 1/10 ---
+  Generating gradient...
+  Diagnosis: The prompt fails to enforce the rule that defaults to 'query_database' for queries that mention 'our...
+  Suggested edits: 1
+  Applying edits...
+  Evaluating candidate...
+  Candidate score: 0.0000 (best: 0.0000)
+  REJECTED
+
+--- Iteration 2/10 ---
+  Generating gradient...
+  Diagnosis: The prompt fails due to ambiguity in interpreting queries that are short or lack context, leading to...
+  Suggested edits: 1
+  Applying edits...
+  Evaluating candidate...
+  Candidate score: 0.0000 (best: 0.0000)
+  REJECTED
+
+--- Iteration 3/10 ---
+  Generating gradient...
+  Diagnosis: The prompt fails to enforce the rule that defaults to 'query_database' for ambiguous queries mention...
+  Suggested edits: 1
+  Applying edits...
+  Evaluating candidate...
+  Candidate score: 0.0000 (best: 0.0000)
+  REJECTED
+
+  No improvement for 3 iterations. Stopping early.
+
+============================================================
+OPTIMIZATION COMPLETE
+============================================================
+  Original score:  0.0000
+  Optimized score: 0.0000
+  Improvement:     +0.0000
+  Iterations:      3
+  Optimized prompt saved to: /home/cesar/coda/prompts/case_b_optimized.txt
+
+============================================================
+CODA Phase 4: VALIDATE - Case B
+  Original PPI: 90.9
+  Optimization improvement: +0.0000
+============================================================
+
+Evaluating optimized prompt on new model...
+New model (optimized): 100%|█████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:50<00:00,  2.54s/it]
+
+Regression test: optimized prompt on old model...
+Old model (regression): 100%|████████████████████████████████████████████████████████████████████████████████████| 20/20 [02:24<00:00,  7.22s/it]
+
+============================================================
+VALIDATION FAILED
+============================================================
+  PPI trajectory: 90.9 -> 0.0 (-90.9)
+  Zone: ORANGE -> CRITICAL
+  Regression PPI (old model): 0.0
+
+  Pass/fail checks:
+    [FAIL] ppi_meets_baseline
+    [FAIL] no_metric_drops_over_10pct
+    [FAIL] regression_acceptable
+
+  RECOMMENDATION: Return to Phase 2 with updated failure data.
+
+  Reports saved to: /home/cesar/coda/results/case_b/20260212_190542
+
+############################################################
+# PIPELINE COMPLETE - Case B
+# Status: FAIL
+# PPI: 90.9 -> 0.0
+# Zone: ORANGE -> CRITICAL
+############################################################
+
+############################################################
+# CODA FULL PIPELINE - Case C
+# Started: 2026-02-12T19:14:17.479003
+############################################################
+
+============================================================
+CODA Phase 1: DIAGNOSE - Case C
+  Cross-Provider CoT Migration: Financial analysis agent migrated from GPT-4 to Claude Haiku 4.5
+  Old model: openai/gpt-4
+  New model: anthropic/claude-haiku-4-5-20251001
+  Test cases: 12
+============================================================
+
+Running baseline (old model)...
+Baseline: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████| 12/12 [02:45<00:00, 13.77s/it]
+
+Running new model...
+New model: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████| 12/12 [00:43<00:00,  3.61s/it]
+
+============================================================
+DIAGNOSIS COMPLETE
+============================================================
+  MHS (baseline):  1.0000
+  MHS (new model): 1.0000
+  PPI:             100.0
+  Triage zone:     GREEN
+  Flagged metrics: 0
+
+  Results saved to: /home/cesar/coda/results/case_c/20260212_191417
+
+PPI is 100.0 (GREEN zone). No optimization needed.
+Pipeline complete.

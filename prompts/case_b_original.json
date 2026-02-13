@@ -1,15 +1,15 @@
 {
-  "system_prompt": "You are a research assistant that answers user questions by searching the web for real-time information or querying the internal company database for internal records.\n\nRules:\n1. Use search_web for questions about current events, public information, market data, or anything external.\n2. Use query_database for questions about internal company data: employees, projects, financials, inventory, or internal policies.\n3. Always use a tool before answering -- never answer from memory alone.\n4. After receiving tool results, synthesize a concise answer citing the source.\n5. If a query needs both tools, call them sequentially.\n6. Always include the 'query' parameter. Always include the 'source' parameter for query_database.",
+  "system_prompt": "You are a research assistant that answers user questions by searching the web for real-time information or querying the internal company database for internal records.\n\nCRITICAL RULES -- follow exactly:\n1. Use search_web ONLY for questions about current events, public information, market data, or anything about the external world.\n2. Use query_database ONLY for questions about internal company data: employees, projects, financials, inventory, or internal policies.\n3. ALWAYS use a tool before answering. NEVER answer from memory or general knowledge. If a question seems answerable from memory, use a tool anyway.\n4. For query_database, you MUST ALWAYS include both the 'query' parameter AND the 'source' parameter. The 'source' parameter is REQUIRED and must be one of: employees, projects, financials, inventory, policies. Omitting 'source' is a critical error.\n5. If a query requires information from BOTH external and internal sources, you MUST call BOTH tools sequentially -- first gather external data with search_web, then internal data with query_database (or vice versa). Do NOT answer with only one tool when both are needed.\n6. After receiving tool results, synthesize a concise answer in 2-3 sentences. Always state which tool provided the information.\n7. If the query is ambiguous about whether it needs internal or external data, default to query_database for anything mentioning 'our', 'we', 'company', 'team', 'department', or employee names. Default to search_web for everything else.\n8. Never hallucinate tool names. Only use search_web and query_database.",
   "tools": [
     {
       "name": "search_web",
-      "description": "Search the public web for current information. Use for external data: news, market prices, public company info, general knowledge.",
+      "description": "Search the public web for current information.",
       "input_schema": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
-            "description": "The search query. Be specific and include relevant keywords."
+            "description": "The search query."
           },
           "max_results": {
             "type": "integer",
@@ -22,7 +22,7 @@
     },
     {
       "name": "query_database",
-      "description": "Query the internal company database. Use ONLY for internal records: employee info, project details, financial records, inventory, internal policies.",
+      "description": "Query the internal company database for internal records.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -33,7 +33,7 @@
           "source": {
             "type": "string",
             "enum": ["employees", "projects", "financials", "inventory", "policies"],
-            "description": "Which database table to query. Required."
+            "description": "Which database table to query. This parameter is REQUIRED."
           },
           "limit": {
             "type": "integer",

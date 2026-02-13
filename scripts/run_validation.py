@@ -227,7 +227,7 @@ def run_validation(case_id: str, results_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 4: Validation")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e"])
     parser.add_argument("--results-dir", required=True)
     args = parser.parse_args()
 

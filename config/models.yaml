@@ -1,5 +1,29 @@
 # Model configurations for each case study
-# Each case defines: old_model, new_model, prompt files, test suite, and metric weights.
+#
+# DESIGN PHILOSOPHY: Each experiment is designed so the original prompt works well
+# on the old model but degrades measurably on the new model, triggering the CODA
+# pipeline's Classify -> Optimize -> Validate phases.
+#
+# Case A: Within-provider upgrade. GPT-4 -> GPT-4o. Expected PPI: 85-94 (orange).
+#   GPT-4o is more conversational/verbose, triggering instruction drift.
+#
+# Case B: Within-provider capability shift. Claude Sonnet 4 -> Claude Haiku 4.5.
+#   Haiku is faster but less capable at complex tool orchestration, triggering
+#   tool-calling failures and source parameter omission. Expected PPI: 70-84 (red).
+#
+# Case C: Cross-provider migration. GPT-4 -> Claude Haiku 4.5.
+#   Maximum divergence: different provider AND smaller model. GPT-4-specific CoT
+#   scaffolding breaks on Claude. Expected PPI: <70 (critical).
+#
+# Case D: Cross-provider capability downgrade. Claude Sonnet 4 -> GPT-4o-mini.
+#   Multi-step arithmetic cost estimation requires reasoning depth that GPT-4o-mini
+#   lacks. Optimization cannot fix fundamental arithmetic capability gaps.
+#   Expected PPI: <70 (critical, unfixable).
+#
+# Case E: Within-provider downgrade. GPT-4 -> GPT-4o-mini.
+#   Incident report formatting task. Format compliance degrades (missing sections,
+#   word limit violations, metadata omissions) but is recoverable via prompt
+#   optimization. Expected PPI: 70-84 (red, optimizable to green).
 
 cases:
   a:
@@ -23,6 +47,9 @@ cases:
           value: 150
         - type: ends_with
           value: "Is there anything else I can help with?"
+        - type: must_not_contain
+          values: ["- ", "* ", "1. ", "2. ", "3. "]
+          label: "no_bullet_points"
       instruction_checks:
         - type: must_not_contain_topics
           topics: ["CompetitorX", "CompetitorY", "CompetitorZ"]
@@ -40,16 +67,16 @@ cases:
         cost: 0.05
 
   b:
-    name: "Tool-Calling Adaptation"
-    description: "Search/DB agent migrated from Claude Haiku 4.5 to Claude Sonnet 4.5"
+    name: "Tool-Calling Capability Shift"
+    description: "Search/DB agent migrated from Claude Sonnet 4 to Claude Haiku 4.5"
     old_model:
       provider: anthropic
-      model: claude-haiku-4-5-20251001
+      model: claude-sonnet-4-20250514
       temperature: 0.2
       max_tokens: 1024
     new_model:
       provider: anthropic
-      model: claude-sonnet-4-5-20250929
+      model: claude-haiku-4-5-20251001
       temperature: 0.2
       max_tokens: 1024
     prompt_file: prompts/case_b_original.json
@@ -68,7 +95,7 @@ cases:
 
   c:
     name: "Cross-Provider CoT Migration"
-    description: "Financial analysis agent migrated from GPT-4 to Claude Sonnet 4.5"
+    description: "Financial analysis agent migrated from GPT-4 to Claude Haiku 4.5"
     old_model:
       provider: openai
       model: gpt-4
@@ -76,7 +103,7 @@ cases:
       max_tokens: 2048
     new_model:
       provider: anthropic
-      model: claude-sonnet-4-5-20250929
+      model: claude-haiku-4-5-20251001
       temperature: 0.1
       max_tokens: 2048
     prompt_file: prompts/case_c_original.txt
@@ -92,6 +119,64 @@ cases:
         consistency: 0.10
         instruction_adherence: 0.10
         latency: 0.05
+
+  d:
+    name: "Cross-Provider Capability Downgrade"
+    description: "Cost estimation agent migrated from Claude Sonnet 4 to GPT-4o-mini"
+    old_model:
+      provider: anthropic
+      model: claude-sonnet-4-20250514
+      temperature: 0.1
+      max_tokens: 2048
+    new_model:
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.1
+      max_tokens: 2048
+    prompt_file: prompts/case_d_original.txt
+    test_suite: test_suites/case_d_tests.jsonl
+    evaluator_config:
+      reasoning_checks:
+        check_intermediate_steps: true
+        require_final_answer_format: "json"
+      metric_weights:
+        task_accuracy: 0.35
+        reasoning_quality: 0.25
+        format_compliance: 0.15
+        consistency: 0.10
+        instruction_adherence: 0.10
+        latency: 0.05
+
+  e:
+    name: "Within-Provider Format Downgrade"
+    description: "Incident report writer migrated from GPT-4 to GPT-4o-mini"
+    old_model:
+      provider: openai
+      model: gpt-4
+      temperature: 0.2
+      max_tokens: 1024
+    new_model:
+      provider: openai
+      model: gpt-4o-mini
+      temperature: 0.2
+      max_tokens: 1024
+    prompt_file: prompts/case_e_original.txt
+    test_suite: test_suites/case_e_tests.jsonl
+    evaluator_config:
+      format_checks:
+        - type: must_have_header
+          value: "INCIDENT REPORT"
+        - type: must_have_sections
+          values: ["SUMMARY", "IMPACT", "ROOT CAUSE", "RESOLUTION", "FOLLOW-UP"]
+        - type: must_end_with
+          value: "--- End of Report ---"
+      metric_weights:
+        format_compliance: 0.35
+        instruction_adherence: 0.25
+        task_accuracy: 0.20
+        consistency: 0.10
+        latency: 0.05
+        cost: 0.05
 
 # Default settings
 defaults:
