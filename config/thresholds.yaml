@@ -1,0 +1,60 @@
+# Triage zone definitions based on Prompt Portability Index (PPI)
+triage_zones:
+  green:
+    min_ppi: 98
+    action: "No action. Monitor in production."
+    optimization_strategy: null
+  yellow:
+    min_ppi: 95
+    action: "Light refinement. Direct prompt editing."
+    optimization_strategy: "direct_edit"
+  orange:
+    min_ppi: 85
+    action: "Moderate optimization. Gradient-based refinement."
+    optimization_strategy: "protegi"
+  red:
+    min_ppi: 70
+    action: "Full CODA pipeline. Consider DSPy recompilation."
+    optimization_strategy: "full_pipeline"
+  critical:
+    min_ppi: 0
+    action: "Ground-up redesign."
+    optimization_strategy: "broad_search"
+
+# Failure severity weights for classification prioritization
+severity_weights:
+  critical: 4   # blocks task completion
+  high: 3       # degrades output quality significantly
+  medium: 2     # impacts user experience
+  low: 1        # cosmetic
+
+# Failure taxonomy category definitions (used by the classifier)
+taxonomy:
+  format_compliance:
+    severity_default: high
+    detection: automated
+    description: "Output does not conform to specified structural format"
+  reasoning_quality:
+    severity_default: high
+    detection: eval_suite
+    description: "Logical reasoning is degraded -- steps skipped, calculations wrong"
+  instruction_drift:
+    severity_default: high
+    detection: checklist
+    description: "Model stops following explicit constraints or guardrails"
+  tool_calling:
+    severity_default: critical
+    detection: automated
+    description: "Tool invocations are malformed, missing, or incorrect"
+  safety_refusal:
+    severity_default: high
+    detection: human_review
+    description: "Model refuses valid requests or accepts previously refused ones"
+  tone_style:
+    severity_default: medium
+    detection: human_review
+    description: "Output tone, verbosity, or style differs from expectations"
+  context_utilization:
+    severity_default: medium
+    detection: long_context_tests
+    description: "Model mishandles long context, RAG, or multi-turn information"

@@ -1,0 +1,48 @@
+{
+  "system_prompt": "You are a research assistant that answers user questions by searching the web for real-time information or querying the internal company database for internal records.\n\nRules:\n1. Use search_web for questions about current events, public information, market data, or anything external.\n2. Use query_database for questions about internal company data: employees, projects, financials, inventory, or internal policies.\n3. Always use a tool before answering -- never answer from memory alone.\n4. After receiving tool results, synthesize a concise answer citing the source.\n5. If a query needs both tools, call them sequentially.\n6. Always include the 'query' parameter. Always include the 'source' parameter for query_database.",
+  "tools": [
+    {
+      "name": "search_web",
+      "description": "Search the public web for current information. Use for external data: news, market prices, public company info, general knowledge.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query. Be specific and include relevant keywords."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return. Default 5.",
+            "default": 5
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "query_database",
+      "description": "Query the internal company database. Use ONLY for internal records: employee info, project details, financial records, inventory, internal policies.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language query describing what data to retrieve."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["employees", "projects", "financials", "inventory", "policies"],
+            "description": "Which database table to query. Required."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of records to return. Default 10.",
+            "default": 10
+          }
+        },
+        "required": ["query", "source"]
+      }
+    }
+  ]
+}

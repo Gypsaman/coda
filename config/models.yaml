@@ -1,0 +1,101 @@
+# Model configurations for each case study
+# Each case defines: old_model, new_model, prompt files, test suite, and metric weights.
+
+cases:
+  a:
+    name: "System Prompt Migration"
+    description: "Customer service agent migrated from GPT-4 to GPT-4o"
+    old_model:
+      provider: openai
+      model: gpt-4
+      temperature: 0.3
+      max_tokens: 300
+    new_model:
+      provider: openai
+      model: gpt-4o
+      temperature: 0.3
+      max_tokens: 300
+    prompt_file: prompts/case_a_original.txt
+    test_suite: test_suites/case_a_tests.jsonl
+    evaluator_config:
+      format_checks:
+        - type: max_word_count
+          value: 150
+        - type: ends_with
+          value: "Is there anything else I can help with?"
+      instruction_checks:
+        - type: must_not_contain_topics
+          topics: ["CompetitorX", "CompetitorY", "CompetitorZ"]
+          label: "competitor_mention"
+        - type: must_contain
+          value: "Let me connect you with a specialist"
+          condition: "when ground_truth contains 'ESCALATE'"
+          label: "escalation_compliance"
+      metric_weights:
+        task_accuracy: 0.30
+        format_compliance: 0.20
+        instruction_adherence: 0.25
+        consistency: 0.15
+        latency: 0.05
+        cost: 0.05
+
+  b:
+    name: "Tool-Calling Adaptation"
+    description: "Search/DB agent migrated from Claude Haiku 4.5 to Claude Sonnet 4.5"
+    old_model:
+      provider: anthropic
+      model: claude-haiku-4-5-20251001
+      temperature: 0.2
+      max_tokens: 1024
+    new_model:
+      provider: anthropic
+      model: claude-sonnet-4-5-20250929
+      temperature: 0.2
+      max_tokens: 1024
+    prompt_file: prompts/case_b_original.json
+    test_suite: test_suites/case_b_tests.jsonl
+    evaluator_config:
+      tool_calling:
+        validate_schema: true
+        required_params_strict: true
+      metric_weights:
+        task_accuracy: 0.30
+        tool_calling_success: 0.30
+        format_compliance: 0.15
+        instruction_adherence: 0.10
+        consistency: 0.10
+        latency: 0.05
+
+  c:
+    name: "Cross-Provider CoT Migration"
+    description: "Financial analysis agent migrated from GPT-4 to Claude Sonnet 4.5"
+    old_model:
+      provider: openai
+      model: gpt-4
+      temperature: 0.1
+      max_tokens: 2048
+    new_model:
+      provider: anthropic
+      model: claude-sonnet-4-5-20250929
+      temperature: 0.1
+      max_tokens: 2048
+    prompt_file: prompts/case_c_original.txt
+    test_suite: test_suites/case_c_tests.jsonl
+    evaluator_config:
+      reasoning_checks:
+        check_intermediate_steps: true
+        require_final_answer_format: "json"
+      metric_weights:
+        task_accuracy: 0.35
+        reasoning_quality: 0.25
+        format_compliance: 0.15
+        consistency: 0.10
+        instruction_adherence: 0.10
+        latency: 0.05
+
+# Default settings
+defaults:
+  consistency_runs: 5          # Number of runs per test case for consistency measurement
+  degradation_threshold: 0.05  # 5% relative decline triggers flagging
+  optimization_max_iterations: 10
+  optimization_patience: 3     # Stop if no improvement for N iterations
