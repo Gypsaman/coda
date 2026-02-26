@@ -6,20 +6,20 @@ triage_zones:
     optimization_strategy: null
   yellow:
     min_ppi: 95
-    action: "Light refinement. Direct prompt editing."
-    optimization_strategy: "direct_edit"
+    action: "Light refinement. Gradient-based refinement, 3 iterations."
+    optimization_strategy: "protegi"
   orange:
     min_ppi: 85
-    action: "Moderate optimization. Gradient-based refinement."
+    action: "Moderate optimization. ProTeGi gradient descent, up to 10 iterations."
     optimization_strategy: "protegi"
   red:
     min_ppi: 70
-    action: "Full CODA pipeline. Consider DSPy recompilation."
-    optimization_strategy: "full_pipeline"
+    action: "Full CODA pipeline. OPRO trajectory-guided optimization."
+    optimization_strategy: "opro"
   critical:
     min_ppi: 0
-    action: "Ground-up redesign."
-    optimization_strategy: "broad_search"
+    action: "Ground-up redesign. EvoPrompt evolutionary search (or APE for reasoning failures)."
+    optimization_strategy: "evoprompt"
 
 # Failure severity weights for classification prioritization
 severity_weights:
@@ -58,3 +58,21 @@ taxonomy:
     severity_default: medium
     detection: long_context_tests
     description: "Model mishandles long context, RAG, or multi-turn information"
+
+# Per-optimizer hyperparameters.
+# Runtime context (failure_cases, classification_summary) is injected by run_optimization.py.
+optimizer_configs:
+  protegi:
+    max_iterations: 10
+    patience: 3
+  ape:
+    n_candidates: 10
+    max_parallel_evals: 5
+  opro:
+    max_iterations: 15
+    patience: 4
+    trajectory_window: 5
+  evoprompt:
+    population_size: 6
+    n_generations: 4
+    max_parallel_evals: 5
