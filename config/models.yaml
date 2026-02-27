@@ -121,30 +121,34 @@ cases:
         latency: 0.05
 
   d:
-    name: "Cross-Provider Capability Downgrade"
-    description: "Cost estimation agent migrated from Claude Sonnet 4 to GPT-4o-mini"
+    name: "Cross-Provider Format Downgrade"
+    description: "Support response writer migrated from Claude Sonnet 4 to GPT-4o-mini"
     old_model:
       provider: anthropic
       model: claude-sonnet-4-20250514
-      temperature: 0.1
-      max_tokens: 2048
+      temperature: 0.2
+      max_tokens: 1024
     new_model:
       provider: openai
       model: gpt-4o-mini
-      temperature: 0.1
-      max_tokens: 2048
+      temperature: 0.2
+      max_tokens: 1024
     prompt_file: prompts/case_d_original.txt
     test_suite: test_suites/case_d_tests.jsonl
     evaluator_config:
-      reasoning_checks:
-        check_intermediate_steps: true
-        require_final_answer_format: "json"
+      format_checks:
+        - type: must_have_header
+          value: "## SUPPORT RESPONSE"
+        - type: must_have_sections
+          values: ["ISSUE ACKNOWLEDGMENT", "ROOT CAUSE ANALYSIS", "RESOLUTION STEPS", "FOLLOW-UP ACTIONS"]
+        - type: must_end_with
+          value: "--- Response by Support Team ---"
+        - type: must_use_numbered_steps
       metric_weights:
-        task_accuracy: 0.35
-        reasoning_quality: 0.25
-        format_compliance: 0.15
-        consistency: 0.10
+        format_compliance: 0.30
         instruction_adherence: 0.10
+        task_accuracy: 0.50
+        consistency: 0.05
         latency: 0.05
 
   e:
@@ -171,12 +175,12 @@ cases:
         - type: must_end_with
           value: "--- End of Report ---"
       metric_weights:
-        format_compliance: 0.35
-        instruction_adherence: 0.25
-        task_accuracy: 0.20
+        format_compliance: 0.20
+        instruction_adherence: 0.10
+        task_accuracy: 0.45
         consistency: 0.10
         latency: 0.05
-        cost: 0.05
+        cost: 0.10
 
 # Default settings
 defaults:

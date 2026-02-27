@@ -513,6 +513,119 @@ def report_no_speculation(output: str) -> float:
     return 1.0
 
 
+def support_response_header(output: str) -> float:
+    """Check that output starts with '## SUPPORT RESPONSE'."""
+    return 1.0 if re.search(r'^##\s*SUPPORT\s*RESPONSE', output.strip(), re.IGNORECASE) else 0.0
+
+
+def support_response_metadata(output: str) -> float:
+    """Check that output contains Ticket ID, Priority, and Estimated Resolution lines."""
+    required = [
+        r'(?i)ticket\s*id\s*:',
+        r'(?i)priority\s*:\s*P[1-4]',
+        r'(?i)estimated\s*resolution\s*:',
+    ]
+    found = sum(1 for pat in required if re.search(pat, output))
+    return found / len(required)
+
+
+def support_response_sections(output: str) -> float:
+    """Check that output contains all 4 required section headers."""
+    required = [
+        r'###\s*ISSUE\s*ACKNOWLEDGMENT',
+        r'###\s*ROOT\s*CAUSE\s*ANALYSIS',
+        r'###\s*RESOLUTION\s*STEPS',
+        r'###\s*FOLLOW[\s-]*UP\s*ACTIONS',
+    ]
+    found = sum(1 for pat in required if re.search(pat, output, re.IGNORECASE))
+    return found / len(required)
+
+
+def support_response_closing(output: str) -> float:
+    """Check that output ends with '--- Response by Support Team ---'."""
+    return 1.0 if "--- Response by Support Team ---" in output else 0.0
+
+
+def support_response_no_bold(output: str) -> float:
+    """Check that response body contains no markdown bold markers."""
+    for line in output.split('\n'):
+        stripped = line.strip()
+        if not stripped.startswith('#') and ('**' in stripped or '__' in stripped):
+            return 0.0
+    return 1.0
+
+
+def support_response_numbered_steps(output: str) -> float:
+    """Check that the RESOLUTION STEPS section uses numbered list format (not bullets)."""
+    section_match = re.search(
+        r'###\s*RESOLUTION\s*STEPS\s*\n(.*?)(?=###|\-\-\-|$)',
+        output, re.DOTALL | re.IGNORECASE
+    )
+    if not section_match:
+        return 0.0
+    content = section_match.group(1)
+    numbered = re.findall(r'^\s*\d+\.\s+\S', content, re.MULTILINE)
+    return 1.0 if len(numbered) >= 2 else (0.5 if len(numbered) == 1 else 0.0)
+
+
+def support_response_no_bullets(output: str) -> float:
+    """Check that output doesn't use markdown bullet points (- or *)."""
+    for line in output.split('\n'):
+        if re.match(r'^\s*[-*]\s+\S', line):
+            return 0.0
+    return 1.0
+
+
+def support_response_priority_accuracy(output: str, expected_priority: str) -> float:
+    """Check that the Priority metadata field matches the expected classification."""
+    match = re.search(r'(?i)priority\s*:\s*(P[1-4])\b', output)
+    if match and match.group(1).upper() == expected_priority.upper():
+        return 1.0
+    return 0.0
+
+
+def support_response_section_word_limits(output: str, limits: dict[str, int]) -> float:
+    """Check that each ### section respects its word limit."""
+    section_pattern = (
+        r'###\s*(ISSUE ACKNOWLEDGMENT|ROOT CAUSE ANALYSIS|RESOLUTION STEPS|FOLLOW[\s-]*UP ACTIONS)'
+        r'\s*\n(.*?)(?=###|\-\-\-|$)'
+    )
+    matches = re.findall(section_pattern, output, re.DOTALL | re.IGNORECASE)
+    if not matches:
+        return 0.0
+    compliant = 0
+    checked = 0
+    for header, content in matches:
+        normalized = re.sub(r'\s+', ' ', header.strip()).upper()
+        if "FOLLOW" in normalized:
+            normalized = "FOLLOW-UP ACTIONS"
+        limit = limits.get(normalized)
+        if limit is not None:
+            checked += 1
+            wc = len(content.strip().split())
+            if wc <= limit:
+                compliant += 1
+    return compliant / checked if checked > 0 else 0.0
+
+
+def report_duration_accuracy(output: str, expected_minutes: int, tolerance_minutes: int = 5) -> float:
+    """Check that the Duration metadata field is within tolerance of the expected duration."""
+    match = re.search(r'(?i)duration\s*:\s*([^\n]+)', output)
+    if not match:
+        return 0.0
+    duration_str = match.group(1).strip()
+    hours_m = re.search(r'(\d+)\s*hour', duration_str)
+    mins_m = re.search(r'(\d+)\s*min', duration_str)
+    total_minutes = 0
+    if hours_m:
+        total_minutes += int(hours_m.group(1)) * 60
+    if mins_m:
+        total_minutes += int(mins_m.group(1))
+    if total_minutes == 0:
+        return 0.5  # duration present but not parseable as hours/minutes
+    return 1.0 if abs(total_minutes - expected_minutes) <= tolerance_minutes else 0.0
+
+
 def consistency_score(outputs: list[str]) -> float:
     """
     Measure consistency across multiple runs of the same input.

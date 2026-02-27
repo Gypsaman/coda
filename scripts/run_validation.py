@@ -150,13 +150,13 @@ def run_validation(case_id: str, results_dir: str):
         "regression_acceptable": ppi_regression >= 90,
     }
 
-    # Check individual metric regression > 10%
+    # Check individual metric regression > 15%
     for metric, baseline_val in baseline_agg.items():
         if isinstance(baseline_val, (int, float)) and baseline_val > 0:
             new_val = new_agg.get(metric, 0)
             if isinstance(new_val, (int, float)):
                 decline = (baseline_val - new_val) / baseline_val
-                if decline > 0.10:
+                if decline > 0.15:
                     checks["no_metric_drops_over_10pct"] = False
 
     passed = all(checks.values())

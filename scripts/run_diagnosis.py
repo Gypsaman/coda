@@ -42,11 +42,15 @@ from evaluators.metrics import (
     tool_calling_success,
     reasoning_quality_ratios,
     reasoning_quality_shows_work,
-    cost_estimation_accuracy,
-    cost_estimation_shows_work,
-    cost_estimation_inline_arithmetic,
-    cost_estimation_raw_json,
-    cost_estimation_decimal_places,
+    support_response_header,
+    support_response_metadata,
+    support_response_sections,
+    support_response_closing,
+    support_response_no_bold,
+    support_response_numbered_steps,
+    support_response_no_bullets,
+    support_response_priority_accuracy,
+    support_response_section_word_limits,
     report_format_header,
     report_format_metadata,
     report_format_sections,
@@ -58,6 +62,7 @@ from evaluators.metrics import (
     report_reporter_accuracy,
     report_section_word_limits,
     report_no_speculation,
+    report_duration_accuracy,
     consistency_score,
     compute_mhs,
     compute_ppi,
@@ -207,27 +212,30 @@ def evaluate_case_c(result: dict) -> dict:
 
 
 def evaluate_case_d(result: dict) -> dict:
-    """Evaluate a Case D (cost estimation) result against expected calculations."""
+    """Evaluate a Case D (support response writer) result against format and accuracy requirements."""
     output = result["output_text"]
     expected = result["expected"]
     scores = {}
 
-    # Cost accuracy -- these are where GPT-4o-mini will fail
-    if "costs" in expected:
-        scores["cost_accuracy"] = cost_estimation_accuracy(output, expected["costs"])
-    scores["cost_shows_work"] = cost_estimation_shows_work(output)
+    # Format compliance -- structural checks (both models pass these reliably)
+    if expected.get("must_have_response_header"):
+        scores["response_header"] = support_response_header(output)
+    if expected.get("must_have_metadata"):
+        scores["response_metadata"] = support_response_metadata(output)
+    if expected.get("must_have_sections"):
+        scores["response_sections"] = support_response_sections(output)
+    if expected.get("must_end_with_closing"):
+        scores["response_closing"] = support_response_closing(output)
 
-    # Format compliance
-    if expected.get("must_produce_valid_json"):
-        scores["format_json"] = format_compliance_json(output)
-    if expected.get("must_have_step_headers"):
-        scores["format_step_headers"] = format_compliance_step_headers(output)
-    if expected.get("must_show_inline_arithmetic"):
-        scores["format_inline_arithmetic"] = cost_estimation_inline_arithmetic(output)
-    if expected.get("json_must_be_raw"):
-        scores["format_raw_json"] = cost_estimation_raw_json(output)
-    if expected.get("must_have_2_decimal_places"):
-        scores["format_decimal_places"] = cost_estimation_decimal_places(output)
+    # Instruction adherence -- numbered steps required
+    if expected.get("must_use_numbered_steps"):
+        scores["response_numbered_steps"] = support_response_numbered_steps(output)
+
+    # Task accuracy -- priority classification (GPT-4o-mini drifts on P2/P3 boundary cases)
+    if "priority" in expected:
+        scores["response_priority_accuracy"] = support_response_priority_accuracy(
+            output, expected["priority"]
+        )
 
     return scores
 
@@ -265,6 +273,12 @@ def evaluate_case_e(result: dict) -> dict:
     # Instruction adherence -- word limits per section
     if "section_word_limits" in expected:
         scores["report_word_limits"] = report_section_word_limits(output, expected["section_word_limits"])
+
+    # Task accuracy -- duration extraction (harder test cases only)
+    if "duration_minutes" in expected:
+        scores["report_duration_accuracy"] = report_duration_accuracy(
+            output, expected["duration_minutes"]
+        )
 
     return scores
 
@@ -339,16 +353,20 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     metric_mapping = {
         "task_accuracy": ["reasoning_ratios", "cost_accuracy",
                           "report_severity_accuracy", "report_status_accuracy",
-                          "report_reporter_accuracy"],
+                          "report_reporter_accuracy", "report_duration_accuracy",
+                          "response_priority_accuracy"],
         "format_compliance": ["format_word_limit", "format_closing", "format_json",
                               "report_header", "report_metadata", "report_sections",
                               "report_closing", "report_severity_valid",
-                              "report_status_valid"],
+                              "report_status_valid",
+                              "response_header", "response_metadata", "response_sections",
+                              "response_closing"],
         "instruction_adherence": [
             "adherence_no_competitors", "adherence_escalation",
             "adherence_no_refund_promise",
             "report_no_exclamation", "report_no_speculation",
             "report_word_limits",
+            "response_numbered_steps",
         ],
         "tool_calling_success": ["tool_calling"],
         "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work",
