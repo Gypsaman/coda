@@ -4,3 +4,5 @@ results/
 paper_draft.md
 CLAUDE.md
 ecc.pdf
+__pycache__/
+*.pyc
