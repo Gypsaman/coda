@@ -11,6 +11,7 @@ import json
 from typing import Callable
 
 from scripts.llm_client import LLMClient
+from evaluators import strip_json_fences
 
 GRADIENT_SYSTEM_PROMPT = """You are a prompt optimization expert. You will be shown:
 1. A system prompt that is being used with a language model
@@ -43,6 +44,7 @@ def generate_gradient(
     current_prompt: str,
     failure_cases: list[dict],
     classification_summary: dict,
+    meta_model_config: dict,
 ) -> dict:
     """Generate a textual gradient from failure cases."""
     case_descriptions = []
@@ -60,22 +62,15 @@ def generate_gradient(
     )
 
     response = client.complete(
-        provider="openai",
-        model="gpt-4o",
+        provider=meta_model_config["provider"],
+        model=meta_model_config["model"],
         system_prompt=GRADIENT_SYSTEM_PROMPT,
         user_message=user_msg,
         temperature=0.3,
         max_tokens=1500,
     )
 
-    text = response["text"].strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
-    if text.startswith("json"):
-        text = text[4:].strip()
+    text = strip_json_fences(response["text"])
 
     try:
         return json.loads(text)
@@ -83,14 +78,14 @@ def generate_gradient(
         return {"diagnosis": text, "edits": []}
 
 
-def apply_edits(client: LLMClient, current_prompt: str, gradient: dict) -> str:
+def apply_edits(client: LLMClient, current_prompt: str, gradient: dict, meta_model_config: dict) -> str:
     """Apply suggested edits to produce an updated prompt."""
     if not gradient.get("edits"):
         return current_prompt
 
     response = client.complete(
-        provider="openai",
-        model="gpt-4o",
+        provider=meta_model_config["provider"],
+        model=meta_model_config["model"],
         system_prompt=APPLY_EDIT_SYSTEM_PROMPT,
         user_message=(
             f"## Original Prompt\n{current_prompt}\n\n"
@@ -118,11 +113,15 @@ def optimize(
         patience (int, default 3)
         failure_cases (list[dict]) — injected at runtime by run_optimization.py
         classification_summary (dict) — injected at runtime
+        meta_model_config (dict) — {provider, model} for the optimizer's own
+            reasoning calls; injected at runtime, defaults to model_config
+            (the case's target model) if absent
     """
     max_iterations = config.get("max_iterations", 10)
     patience = config.get("patience", 3)
     failure_cases = config.get("failure_cases", [])
     classification_summary = config.get("classification_summary", {})
+    meta_model_config = config.get("meta_model_config", model_config)
 
     baseline_score = eval_fn(prompt)
     best_prompt = prompt
@@ -132,7 +131,7 @@ def optimize(
 
     for iteration in range(1, max_iterations + 1):
         print(f"\n  [ProTeGi] Iteration {iteration}/{max_iterations}")
-        gradient = generate_gradient(client, best_prompt, failure_cases, classification_summary)
+        gradient = generate_gradient(client, best_prompt, failure_cases, classification_summary, meta_model_config)
         print(f"    Diagnosis: {gradient.get('diagnosis', 'N/A')[:100]}...")
         print(f"    Edits suggested: {len(gradient.get('edits', []))}")
 
@@ -140,7 +139,7 @@ def optimize(
             print("    No edits suggested. Stopping.")
             break
 
-        candidate = apply_edits(client, best_prompt, gradient)
+        candidate = apply_edits(client, best_prompt, gradient, meta_model_config)
         candidate_score = eval_fn(candidate)
         accepted = candidate_score > best_score
 

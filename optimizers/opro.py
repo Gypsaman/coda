@@ -37,11 +37,15 @@ def optimize(
         patience (int, default 4)
         trajectory_window (int, default 5) — how many past entries the LLM sees
         classification_summary (dict) — injected at runtime
+        meta_model_config (dict) — {provider, model} for the optimizer's own
+            reasoning calls; injected at runtime, defaults to model_config
+            (the case's target model) if absent
     """
     max_iterations = config.get("max_iterations", 15)
     patience = config.get("patience", 4)
     window = config.get("trajectory_window", 5)
     classification_summary = config.get("classification_summary", {})
+    meta_model_config = config.get("meta_model_config", model_config)
 
     baseline_score = eval_fn(prompt)
     trajectory = [{"prompt": prompt, "score": baseline_score}]
@@ -59,8 +63,8 @@ def optimize(
         )
 
         response = client.complete(
-            provider="openai",
-            model="gpt-4o",
+            provider=meta_model_config["provider"],
+            model=meta_model_config["model"],
             system_prompt=OPRO_SYSTEM_PROMPT,
             user_message=(
                 f"## Failure Context\n{json.dumps(classification_summary, indent=2)}\n\n"

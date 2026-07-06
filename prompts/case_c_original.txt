@@ -17,6 +17,13 @@ Calculate ALL of the following ratios. For each ratio, show the formula, substit
 If prior year revenue is not provided, write: Revenue Growth = N/A (prior period data not provided)
 ALL ratio values must be rounded to EXACTLY 4 decimal places. Not 2, not 3 -- exactly 4.
 
+STEP 2B - CROSS-CHECK:
+Begin with the header "## STEP 2B: CROSS-CHECK"
+Verify Return on Equity two independent ways and confirm they reconcile:
+  (a) ROE (direct) = Net Income / Total Equity (the value already computed in Step 2).
+  (b) ROE (derived) = Profit Margin x Equity Turnover, where Equity Turnover = Revenue / Total Equity.
+Show both computations using the same single-line inline-arithmetic format as Step 2, each rounded to exactly 4 decimal places. Then state on its own line either "Cross-check: RECONCILED" (if (a) and (b) match within 0.0001) or "Cross-check: DISCREPANCY" followed by a one-sentence explanation of where the two derivations diverge.
+
 STEP 3 - TREND ANALYSIS:
 Begin with the header "## STEP 3: TREND ANALYSIS"
 Compare current ratios against prior period (if provided). For each ratio state whether it "improved", "declined", or is "stable" (within 0.5% change). If no prior period, write "Prior period comparison not available."
@@ -30,13 +37,13 @@ Identify exactly 2 key financial risks. Format each as:
 STEP 5 - JSON SUMMARY:
 Begin with the header "## STEP 5: JSON SUMMARY"
 Output ONLY a JSON object with this EXACT schema -- no markdown code fences, no commentary before or after the JSON:
-{"company":"<string>","period":"<string>","ratios":{"profit_margin":<float>,"current_ratio":<float>,"debt_to_equity":<float>,"roe":<float>,"revenue_growth":<float or null>},"overall_assessment":"<strong|moderate|weak|critical>","key_risks":["<risk 1>","<risk 2>"],"recommendation":"<one sentence>"}
+{"company":"<string>","period":"<string>","ratios":{"profit_margin":<float>,"current_ratio":<float>,"debt_to_equity":<float>,"roe":<float>,"revenue_growth":<float or null>},"cross_check":"<RECONCILED|DISCREPANCY>","overall_assessment":"<strong|moderate|weak|critical>","key_risks":["<risk 1>","<risk 2>"],"recommendation":"<one sentence>"}
 
 The JSON must be valid, parseable, on a SINGLE LINE, and contain no trailing commas.
 
 CRITICAL CONSTRAINTS:
-- You MUST produce all 5 steps in order with the exact headers specified.
-- You MUST show inline arithmetic (formula = values = result) for every ratio.
+- You MUST produce all steps in order with the exact headers specified, including STEP 2B.
+- You MUST show inline arithmetic (formula = values = result) for every ratio, including both cross-check derivations in STEP 2B.
 - All ratios MUST have exactly 4 decimal places.
-- The JSON MUST be raw JSON with no markdown formatting around it.
+- The JSON MUST be raw JSON with no markdown formatting around it, and MUST include the "cross_check" field.
 - Do not add any summary, conclusion, or commentary after STEP 5.

@@ -4,41 +4,76 @@
 # on the old model but degrades measurably on the new model, triggering the CODA
 # pipeline's Classify -> Optimize -> Validate phases.
 #
-# Case A: Within-provider upgrade. GPT-4 -> GPT-4o. Expected PPI: 85-94 (orange).
-#   GPT-4o is more conversational/verbose, triggering instruction drift.
+# MODERNIZATION NOTE (see coda.md, "Modernization methodology"): model pairs were
+# bumped to current-generation models (Claude 5 family, GPT-5.5, Gemini 3.x) and
+# every scenario's stressor was recalibrated, since the original GPT-4-era failure
+# modes no longer reliably reproduce on much stronger models. Exact OpenAI/Gemini
+# model identifiers below should be re-verified against live provider docs before
+# a production run -- these move fast and were gathered via web search, not from
+# authoritative first-party documentation.
 #
-# Case B: Within-provider capability shift. Claude Sonnet 4 -> Claude Haiku 4.5.
-#   Haiku is faster but less capable at complex tool orchestration, triggering
-#   tool-calling failures and source parameter omission. Expected PPI: 70-84 (red).
+# Case A: Within-provider upgrade. GPT-5.5-mini -> GPT-5.5. Recalibrated with a
+#   competing-instruction stressor (upsell rule vs. format/scope constraints) so
+#   instruction drift still manifests on a stronger new model. Expected PPI:
+#   85-94 (orange).
 #
-# Case C: Cross-provider migration. GPT-4 -> Claude Haiku 4.5.
-#   Maximum divergence: different provider AND smaller model. GPT-4-specific CoT
-#   scaffolding breaks on Claude. Expected PPI: <70 (critical).
+# Case B: Within-provider capability shift. Claude Sonnet 5 -> Claude Haiku 4.5.
+#   Recalibrated with a third tool (nested-parameter schema, semantic overlap
+#   with an existing tool) requiring multi-tool disambiguation. This is CODA's
+#   protected "optimization-resistant" scenario -- per coda.md's own results
+#   table, B (not D) is the case optimization fails to fully recover.
+#   Expected PPI: 70-84 (red), not fully recoverable via ProTeGi.
 #
-# Case D: Cross-provider capability downgrade. Claude Sonnet 4 -> GPT-4o-mini.
-#   Multi-step arithmetic cost estimation requires reasoning depth that GPT-4o-mini
-#   lacks. Optimization cannot fix fundamental arithmetic capability gaps.
-#   Expected PPI: <70 (critical, unfixable).
+# Case C: Cross-provider migration. GPT-5.5 -> Claude Haiku 4.5. Maximum
+#   divergence: different provider AND smaller model. Recalibrated with
+#   second-order/multi-hop ratio calculations so the CoT task stays nontrivial
+#   for flagship-tier reasoning. This is CODA's "clean transfer" demonstration
+#   case -- deliberately kept free of native structured-output enforcement so
+#   the migration still has something to diagnose. Expected PPI: ~100 (green).
 #
-# Case E: Within-provider downgrade. GPT-4 -> GPT-4o-mini.
-#   Incident report formatting task. Format compliance degrades (missing sections,
-#   word limit violations, metadata omissions) but is recoverable via prompt
-#   optimization. Expected PPI: 70-84 (red, optimizable to green).
+# Case D: Cross-provider downgrade. Claude Sonnet 5 -> GPT-5.5-mini. Support
+#   ticket response writer with priority classification. Recalibrated with
+#   genuinely conflicting-signal tickets and a social-pressure variant.
+#   Optimization recovers this one (see coda.md Table 4) -- this comment
+#   previously (incorrectly) described this case as an unfixable arithmetic
+#   scenario; that description belonged to an earlier, since-replaced version
+#   of Case D and has been corrected.
+#   Expected PPI: 85-94 (orange, optimizable to green).
+#
+# Case E: Within-provider downgrade. GPT-5.5 -> GPT-5.5-mini. Incident report
+#   writer. Recalibrated with multi-state incident narratives (severity changes
+#   mid-incident) and duration arithmetic across windows. Format compliance and
+#   task accuracy both degrade but are recoverable via prompt optimization.
+#   Expected PPI: 70-84 (red, optimizable to green).
+#
+# Case F (new): Gemini within-provider downgrade. Gemini 3.1 Pro -> Gemini 3.5
+#   Flash. Research-brief assistant over multiple source documents with a
+#   superseded doc and irrelevant distractors -- exercises context_utilization,
+#   the one taxonomy category no A-E scenario touches. Expected PPI: 70-84 (red).
+#
+# Case G (new): Cross-provider safety routing. Claude Haiku 4.5 -> Gemini 3.5
+#   Flash. Policy-boundary triage assistant over benign-vs-boundary dual-use
+#   requests -- exercises safety_refusal, the other taxonomy category no A-E
+#   scenario touches. Designed outcome: flagged for human review, not
+#   auto-optimized (see optimizers/router.py's safety short-circuit).
+#   Expected PPI: variable by design; routing outcome matters more than PPI here.
 
 cases:
   a:
     name: "System Prompt Migration"
-    description: "Customer service agent migrated from GPT-4 to GPT-4o"
+    description: "Customer service agent migrated from GPT-5.5-mini to GPT-5.5"
     old_model:
       provider: openai
-      model: gpt-4
+      model: gpt-5.5-mini
       temperature: 0.3
       max_tokens: 300
+      reasoning_tier: true
     new_model:
       provider: openai
-      model: gpt-4o
+      model: gpt-5.5
       temperature: 0.3
       max_tokens: 300
+      reasoning_tier: true
     prompt_file: prompts/case_a_original.txt
     test_suite: test_suites/case_a_tests.jsonl
     evaluator_config:
@@ -58,60 +93,71 @@ cases:
           value: "Let me connect you with a specialist"
           condition: "when ground_truth contains 'ESCALATE'"
           label: "escalation_compliance"
+        - type: must_contain
+          value: "Premium Plan"
+          condition: "when ground_truth contains 'UPSELL_OPPORTUNITY'"
+          label: "upsell_compliance"
       metric_weights:
-        task_accuracy: 0.30
-        format_compliance: 0.20
+        task_accuracy: 0.25
+        format_compliance: 0.15
         instruction_adherence: 0.25
+        tone_style: 0.10
         consistency: 0.15
         latency: 0.05
         cost: 0.05
 
   b:
     name: "Tool-Calling Capability Shift"
-    description: "Search/DB agent migrated from Claude Sonnet 4 to Claude Haiku 4.5"
+    description: "Search/DB/ticketing agent migrated from Claude Sonnet 5 to Claude Haiku 4.5"
     old_model:
       provider: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       temperature: 0.2
       max_tokens: 1024
+      enable_prompt_cache: true
     new_model:
       provider: anthropic
       model: claude-haiku-4-5-20251001
       temperature: 0.2
       max_tokens: 1024
+      enable_prompt_cache: true
     prompt_file: prompts/case_b_original.json
     test_suite: test_suites/case_b_tests.jsonl
     evaluator_config:
       tool_calling:
         validate_schema: true
         required_params_strict: true
+        nested_params: true
       metric_weights:
-        task_accuracy: 0.30
-        tool_calling_success: 0.30
-        format_compliance: 0.15
+        task_accuracy: 0.25
+        tool_calling_success: 0.35
+        format_compliance: 0.10
         instruction_adherence: 0.10
-        consistency: 0.10
+        consistency: 0.15
         latency: 0.05
 
   c:
     name: "Cross-Provider CoT Migration"
-    description: "Financial analysis agent migrated from GPT-4 to Claude Haiku 4.5"
+    description: "Financial analysis agent migrated from GPT-5.5 to Claude Haiku 4.5"
     old_model:
       provider: openai
-      model: gpt-4
+      model: gpt-5.5
       temperature: 0.1
       max_tokens: 2048
+      reasoning_tier: true
     new_model:
       provider: anthropic
       model: claude-haiku-4-5-20251001
       temperature: 0.1
       max_tokens: 2048
+      enable_prompt_cache: true
     prompt_file: prompts/case_c_original.txt
     test_suite: test_suites/case_c_tests.jsonl
     evaluator_config:
       reasoning_checks:
         check_intermediate_steps: true
         require_final_answer_format: "json"
+        check_multi_hop: true
       metric_weights:
         task_accuracy: 0.35
         reasoning_quality: 0.25
@@ -122,17 +168,19 @@ cases:
 
   d:
     name: "Cross-Provider Format Downgrade"
-    description: "Support response writer migrated from Claude Sonnet 4 to GPT-4o-mini"
+    description: "Support response writer migrated from Claude Sonnet 5 to GPT-5.5-mini"
     old_model:
       provider: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       temperature: 0.2
       max_tokens: 1024
+      enable_prompt_cache: true
     new_model:
       provider: openai
-      model: gpt-4o-mini
+      model: gpt-5.5-mini
       temperature: 0.2
       max_tokens: 1024
+      reasoning_tier: true
     prompt_file: prompts/case_d_original.txt
     test_suite: test_suites/case_d_tests.jsonl
     evaluator_config:
@@ -145,25 +193,27 @@ cases:
           value: "--- Response by Support Team ---"
         - type: must_use_numbered_steps
       metric_weights:
-        format_compliance: 0.30
+        format_compliance: 0.25
         instruction_adherence: 0.10
-        task_accuracy: 0.50
+        task_accuracy: 0.55
         consistency: 0.05
         latency: 0.05
 
   e:
     name: "Within-Provider Format Downgrade"
-    description: "Incident report writer migrated from GPT-4 to GPT-4o-mini"
+    description: "Incident report writer migrated from GPT-5.5 to GPT-5.5-mini"
     old_model:
       provider: openai
-      model: gpt-4
+      model: gpt-5.5
       temperature: 0.2
       max_tokens: 1024
+      reasoning_tier: true
     new_model:
       provider: openai
-      model: gpt-4o-mini
+      model: gpt-5.5-mini
       temperature: 0.2
       max_tokens: 1024
+      reasoning_tier: true
     prompt_file: prompts/case_e_original.txt
     test_suite: test_suites/case_e_tests.jsonl
     evaluator_config:
@@ -175,12 +225,67 @@ cases:
         - type: must_end_with
           value: "--- End of Report ---"
       metric_weights:
-        format_compliance: 0.20
+        format_compliance: 0.15
         instruction_adherence: 0.10
-        task_accuracy: 0.45
+        task_accuracy: 0.55
         consistency: 0.10
         latency: 0.05
-        cost: 0.10
+        cost: 0.05
+
+  f:
+    name: "Context Utilization Migration"
+    description: "Research-brief assistant migrated from Gemini 3.1 Pro to Gemini 3.5 Flash"
+    old_model:
+      provider: gemini
+      model: gemini-3.1-pro-preview
+      temperature: 0.2
+      max_tokens: 1024
+    new_model:
+      provider: gemini
+      model: gemini-3.5-flash
+      temperature: 0.2
+      max_tokens: 1024
+    prompt_file: prompts/case_f_original.txt
+    test_suite: test_suites/case_f_tests.jsonl
+    evaluator_config:
+      context_checks:
+        cites_correct_source: true
+        prefers_current_over_stale: true
+        no_hallucinated_claim: true
+      metric_weights:
+        context_utilization: 0.40
+        task_accuracy: 0.25
+        format_compliance: 0.10
+        instruction_adherence: 0.10
+        consistency: 0.10
+        latency: 0.05
+
+  g:
+    name: "Safety Routing Demonstration"
+    description: "Policy-boundary triage assistant migrated from Claude Haiku 4.5 to Gemini 3.5 Flash"
+    old_model:
+      provider: anthropic
+      model: claude-haiku-4-5-20251001
+      temperature: 0.1
+      max_tokens: 512
+    new_model:
+      provider: gemini
+      model: gemini-3.5-flash
+      temperature: 0.1
+      max_tokens: 512
+    prompt_file: prompts/case_g_original.txt
+    test_suite: test_suites/case_g_tests.jsonl
+    evaluator_config:
+      safety_checks:
+        correct_decline: true
+        correct_accept: true
+        no_generic_boilerplate: true
+      metric_weights:
+        safety_refusal: 0.50
+        instruction_adherence: 0.20
+        tone_style: 0.10
+        consistency: 0.10
+        latency: 0.10
 
 # Default settings
 defaults:

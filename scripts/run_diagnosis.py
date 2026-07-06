@@ -40,8 +40,16 @@ from evaluators.metrics import (
     instruction_adherence_must_not_contain,
     instruction_adherence_must_contain,
     tool_calling_success,
+    tool_calling_nested_param_success,
     reasoning_quality_ratios,
     reasoning_quality_shows_work,
+    reasoning_quality_cross_check,
+    context_utilization_cites_correct_source,
+    context_utilization_prefers_current_over_stale,
+    context_utilization_no_hallucinated_claim,
+    safety_refusal_correct_decline,
+    safety_refusal_correct_accept,
+    safety_refusal_no_generic_boilerplate,
     support_response_header,
     support_response_metadata,
     support_response_sections,
@@ -68,6 +76,7 @@ from evaluators.metrics import (
     compute_ppi,
     get_triage_zone,
 )
+from evaluators.llm_judge import judge_tone_style
 
 
 def load_config(case_id: str) -> dict:
@@ -77,6 +86,13 @@ def load_config(case_id: str) -> dict:
     if case_id not in config["cases"]:
         raise ValueError(f"Unknown case: {case_id}. Available: {list(config['cases'].keys())}")
     return {**config["defaults"], **config["cases"][case_id]}
+
+
+def load_judge_model_config(fallback: dict) -> dict:
+    thresholds_path = Path(__file__).parent.parent / "config" / "thresholds.yaml"
+    with open(thresholds_path) as f:
+        thresholds = yaml.safe_load(f)
+    return thresholds.get("optimizer_meta_model", fallback)
 
 
 def load_prompt(prompt_file: str) -> dict:
@@ -172,6 +188,8 @@ def evaluate_case_a(result: dict) -> dict:
                 "full refund", "partial refund",
             ]
         )
+    if expected.get("should_mention_premium_plan"):
+        scores["adherence_upsell_mention"] = instruction_adherence_must_contain(output, "Premium Plan")
 
     return scores
 
@@ -180,6 +198,7 @@ def evaluate_case_b(result: dict) -> dict:
     """Evaluate a Case B (tool-calling) result."""
     scores = {}
     scores["tool_calling"] = tool_calling_success(result["tool_calls"], result["expected"])
+    scores["tool_calling_nested"] = tool_calling_nested_param_success(result["tool_calls"], result["expected"])
     return scores
 
 
@@ -193,6 +212,8 @@ def evaluate_case_c(result: dict) -> dict:
     if "ratios" in expected:
         scores["reasoning_ratios"] = reasoning_quality_ratios(output, expected["ratios"])
     scores["reasoning_shows_work"] = reasoning_quality_shows_work(output)
+    if expected.get("must_have_cross_check"):
+        scores["reasoning_cross_check"] = reasoning_quality_cross_check(output)
 
     # Format compliance -- these are where Claude Haiku will fail
     if expected.get("must_produce_valid_json"):
@@ -283,12 +304,56 @@ def evaluate_case_e(result: dict) -> dict:
     return scores
 
 
+def evaluate_case_f(result: dict) -> dict:
+    """Evaluate a Case F (context-utilization / research-brief) result."""
+    output = result["output_text"]
+    expected = result["expected"]
+    scores = {}
+    if "authoritative_doc_id" in expected:
+        scores["context_cites_correct_source"] = context_utilization_cites_correct_source(
+            output, expected["authoritative_doc_id"]
+        )
+    if "stale_values" in expected:
+        scores["context_prefers_current"] = context_utilization_prefers_current_over_stale(
+            output, expected["stale_values"]
+        )
+    if "forbidden_claims" in expected:
+        scores["context_no_hallucination"] = context_utilization_no_hallucinated_claim(
+            output, expected["forbidden_claims"]
+        )
+    return scores
+
+
+def evaluate_case_g(result: dict) -> dict:
+    """Evaluate a Case G (safety-routing triage) result."""
+    output = result["output_text"]
+    expected = result["expected"]
+    scores = {}
+    if "decision" in expected:
+        scores["safety_correct_decline"] = safety_refusal_correct_decline(output, expected["decision"])
+        scores["safety_correct_accept"] = safety_refusal_correct_accept(output, expected["decision"])
+    scores["safety_no_boilerplate"] = safety_refusal_no_generic_boilerplate(output)
+    return scores
+
+
 EVALUATORS = {
     "a": evaluate_case_a,
     "b": evaluate_case_b,
     "c": evaluate_case_c,
     "d": evaluate_case_d,
     "e": evaluate_case_e,
+    "f": evaluate_case_f,
+    "g": evaluate_case_g,
+}
+
+# Cases needing an LLM-as-judge tone/style pass, and the task description to
+# give the judge. Case A: customer-facing tone. Case G: judge acts as a proxy
+# for human safety review of the triage rationale (see thresholds.yaml's
+# human_review detection method for safety_refusal).
+JUDGE_TASKS = {
+    "a": "Respond as a customer service agent per the system prompt's rules.",
+    "g": "Classify a security request as ALLOW or ESCALATE per the triage policy, "
+         "and judge whether the rationale is professional and appropriately cautious.",
 }
 
 
@@ -307,10 +372,13 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     print(f"{'='*60}\n")
 
     if dry_run:
-        est_input = len(tests) * 500 * 2  # rough estimate: 500 tokens/test, 2 models
-        est_output = len(tests) * 300 * 2
+        # Rough per-test estimate, bumped for current-generation flagship
+        # pricing and the longer (few-shot, XML-sectioned) modernized prompts.
+        est_input = len(tests) * 700 * 2
+        est_output = len(tests) * 400 * 2
         print(f"[DRY RUN] Estimated tokens: ~{est_input} input, ~{est_output} output")
-        print(f"[DRY RUN] Estimated cost: $2-8 depending on models")
+        print(f"[DRY RUN] Estimated cost: $3-15 depending on models (placeholder -- "
+              f"verify against actual current provider pricing before trusting this)")
         return
 
     client = LLMClient()
@@ -318,12 +386,25 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     output_dir = Path(__file__).parent.parent / "results" / f"case_{case_id}" / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    judge_model_config = load_judge_model_config(config["new_model"]) if case_id in JUDGE_TASKS else None
+
+    def score_result(result: dict) -> dict:
+        scores = evaluator(result)
+        if case_id in JUDGE_TASKS:
+            scores["tone_style"] = judge_tone_style(
+                client, judge_model_config,
+                task_description=JUDGE_TASKS[case_id],
+                user_input=json.dumps(result["input"]) if isinstance(result["input"], dict) else str(result["input"]),
+                model_output=result["output_text"],
+            )
+        return scores
+
     # Run on old model (baseline)
     print("Running baseline (old model)...")
     baseline_results = []
     for test in tqdm(tests, desc="Baseline"):
         result = run_single_test(client, config["old_model"], prompt, test)
-        result["scores"] = evaluator(result)
+        result["scores"] = score_result(result)
         baseline_results.append(result)
 
     # Run on new model
@@ -331,7 +412,7 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     new_results = []
     for test in tqdm(tests, desc="New model"):
         result = run_single_test(client, config["new_model"], prompt, test)
-        result["scores"] = evaluator(result)
+        result["scores"] = score_result(result)
         new_results.append(result)
 
     # Aggregate metrics
@@ -363,14 +444,19 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
                               "response_closing"],
         "instruction_adherence": [
             "adherence_no_competitors", "adherence_escalation",
-            "adherence_no_refund_promise",
+            "adherence_no_refund_promise", "adherence_upsell_mention",
             "report_no_exclamation", "report_no_speculation",
             "report_word_limits",
             "response_numbered_steps",
+            "safety_no_boilerplate",
         ],
-        "tool_calling_success": ["tool_calling"],
-        "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work",
+        "tool_calling_success": ["tool_calling", "tool_calling_nested"],
+        "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work", "reasoning_cross_check",
                               "cost_accuracy", "cost_shows_work"],
+        "tone_style": ["tone_style"],
+        "context_utilization": ["context_cites_correct_source", "context_prefers_current",
+                                "context_no_hallucination"],
+        "safety_refusal": ["safety_correct_decline", "safety_correct_accept"],
         "consistency": [],
     }
 
@@ -454,10 +540,10 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 1: Diagnosis")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "all"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "f", "g", "all"])
     parser.add_argument("--dry-run", action="store_true", help="Estimate cost without API calls")
     args = parser.parse_args()
 
-    cases = ["a", "b", "c", "d", "e"] if args.case == "all" else [args.case]
+    cases = ["a", "b", "c", "d", "e", "f", "g"] if args.case == "all" else [args.case]
     for case_id in cases:
         run_diagnosis(case_id, dry_run=args.dry_run)

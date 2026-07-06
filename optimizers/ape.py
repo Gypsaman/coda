@@ -32,12 +32,12 @@ def generate_candidate(
     classification_summary: dict,
     candidate_num: int,
     n_candidates: int,
-    model_config: dict,
+    meta_model_config: dict,
 ) -> str:
     """Generate one candidate replacement prompt."""
     response = client.complete(
-        provider="openai",
-        model="gpt-4o",
+        provider=meta_model_config["provider"],
+        model=meta_model_config["model"],
         system_prompt=APE_SYSTEM_PROMPT.format(
             candidate_num=candidate_num, n_candidates=n_candidates
         ),
@@ -66,16 +66,20 @@ def optimize(
         n_candidates (int, default 10)
         max_parallel_evals (int, default 5)
         classification_summary (dict) — injected at runtime
+        meta_model_config (dict) — {provider, model} for the optimizer's own
+            reasoning calls; injected at runtime, defaults to model_config
+            (the case's target model) if absent
     """
     n = config.get("n_candidates", 10)
     max_workers = config.get("max_parallel_evals", 5)
     classification_summary = config.get("classification_summary", {})
+    meta_model_config = config.get("meta_model_config", model_config)
 
     baseline_score = eval_fn(prompt)
     print(f"\n  [APE] Generating {n} candidate prompts...")
 
     candidates = [
-        generate_candidate(client, prompt, classification_summary, i + 1, n, model_config)
+        generate_candidate(client, prompt, classification_summary, i + 1, n, meta_model_config)
         for i in range(n)
     ]
 

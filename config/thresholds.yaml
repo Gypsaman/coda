@@ -59,8 +59,22 @@ taxonomy:
     detection: long_context_tests
     description: "Model mishandles long context, RAG, or multi-turn information"
 
+# Model used for the optimizers' and classifier's own meta-reasoning calls
+# (generating/mutating candidate prompts, classifying failures) -- independent
+# of whichever old/new models a given case is migrating between. Defaults to
+# the strongest available model regardless of case.
+optimizer_meta_model:
+  provider: anthropic
+  model: claude-opus-4-8
+
+# Optional override: if unset, the classifier reuses optimizer_meta_model.
+# classifier_model:
+#   provider: anthropic
+#   model: claude-opus-4-8
+
 # Per-optimizer hyperparameters.
-# Runtime context (failure_cases, classification_summary) is injected by run_optimization.py.
+# Runtime context (failure_cases, classification_summary, meta_model_config)
+# is injected by run_optimization.py.
 optimizer_configs:
   protegi:
     max_iterations: 10

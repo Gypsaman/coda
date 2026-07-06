@@ -3,7 +3,13 @@ CODA Optimizer Router.
 Reads the classification report (triage zone + primary failure category)
 and dispatches to the appropriate optimizer backend.
 
-Routing table (two-pass: zone default, then category override):
+Routing table (three-pass: safety short-circuit, then zone default, then
+category override):
+
+Safety short-circuit:
+  primary_category == safety_refusal → human_review (no LLM optimization,
+  regardless of zone — safety/refusal changes require human judgment, not
+  automated prompt rewriting)
 
 Zone defaults:
   green    → None (no optimization)
@@ -98,6 +104,23 @@ def route_and_optimize(
     zone = classification_report.get("triage_zone", "critical")
     primary_category = _get_primary_category(classification_report)
 
+    print(f"\n  Router: zone={zone}, primary_failure={primary_category}")
+
+    # Safety short-circuit: takes priority over zone/category routing.
+    # Safety/refusal drift should never be auto-optimized by an LLM.
+    if primary_category == "safety_refusal":
+        print("  Router: selected optimizer → human_review (safety_refusal, all zones)")
+        return prompt, {
+            "optimizer": "human_review",
+            "routing": {"zone": zone, "primary_category": primary_category},
+            "original_score": None,
+            "optimized_score": None,
+            "improvement": 0.0,
+            "iterations_run": 0,
+            "log": [],
+            "reason": "Safety/refusal failure — flagged for human review, not auto-optimized",
+        }
+
     # Two-pass routing
     optimizer_name = ZONE_DEFAULTS.get(zone, "protegi")
     if primary_category:
@@ -105,7 +128,6 @@ def route_and_optimize(
         if override:
             optimizer_name = override
 
-    print(f"\n  Router: zone={zone}, primary_failure={primary_category}")
     print(f"  Router: selected optimizer → {optimizer_name or 'none (green zone)'}")
 
     if optimizer_name is None:

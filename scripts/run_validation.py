@@ -24,6 +24,15 @@ from scripts.run_diagnosis import EVALUATORS, load_test_suite
 from evaluators.metrics import compute_mhs, compute_ppi, get_triage_zone
 
 
+def load_optimized_prompt(optimized_path: Path) -> dict:
+    """Load an optimized prompt artifact, preserving tool schemas for JSON artifacts."""
+    if str(optimized_path).endswith(".json"):
+        with open(optimized_path) as f:
+            return json.load(f)
+    with open(optimized_path) as f:
+        return {"system_prompt": f.read(), "tools": None}
+
+
 def run_validation(case_id: str, results_dir: str):
     config_path = Path(__file__).parent.parent / "config" / "models.yaml"
     with open(config_path) as f:
@@ -34,12 +43,14 @@ def run_validation(case_id: str, results_dir: str):
     diagnosis = json.loads((results_path / "diagnosis_report.json").read_text())
     optimization = json.loads((results_path / "optimization_log.json").read_text())
 
-    # Load optimized prompt
+    # Load optimized prompt (JSON-aware, so Case B's tool schema survives)
     optimized_path = Path(optimization["optimized_prompt_path"])
     if not optimized_path.is_absolute():
         optimized_path = Path(__file__).parent.parent / optimized_path
-    with open(optimized_path) as f:
-        optimized_prompt = f.read()
+    optimized = load_optimized_prompt(optimized_path)
+    optimized_prompt = optimized["system_prompt"]
+    tools = optimized.get("tools")
+    tool_choice = optimized.get("tool_choice")
 
     # Load test suite
     tests = load_test_suite(case_config["test_suite"])
@@ -68,6 +79,8 @@ def run_validation(case_id: str, results_dir: str):
             user_message=user_msg,
             temperature=case_config["new_model"].get("temperature", 0.3),
             max_tokens=case_config["new_model"].get("max_tokens", 1024),
+            tools=tools,
+            tool_choice=tool_choice,
         )
 
         result = {
@@ -98,6 +111,7 @@ def run_validation(case_id: str, results_dir: str):
             user_message=user_msg,
             temperature=case_config["old_model"].get("temperature", 0.3),
             max_tokens=case_config["old_model"].get("max_tokens", 1024),
+            tools=tools,
         )
 
         result = {
@@ -227,7 +241,7 @@ def run_validation(case_id: str, results_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 4: Validation")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "f", "g"])
     parser.add_argument("--results-dir", required=True)
     args = parser.parse_args()
 

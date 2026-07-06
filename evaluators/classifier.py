@@ -8,6 +8,8 @@ producing a structured classification report.
 import json
 from typing import Any
 
+from evaluators import strip_json_fences
+
 CLASSIFIER_SYSTEM_PROMPT = """You are an expert prompt failure classifier. Given a prompt, its expected output, 
 and its actual output from a language model, classify the failure into one or more categories from this taxonomy:
 
@@ -56,15 +58,7 @@ def build_classification_message(
 
 def parse_classification(raw_response: str) -> dict:
     """Parse the classifier's JSON response, with fallback handling."""
-    # Strip markdown fences if present
-    cleaned = raw_response.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    cleaned = cleaned.strip()
-    if cleaned.startswith("json"):
-        cleaned = cleaned[4:].strip()
+    cleaned = strip_json_fences(raw_response)
 
     try:
         result = json.loads(cleaned)

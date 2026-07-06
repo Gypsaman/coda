@@ -20,6 +20,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.llm_client import LLMClient
+from scripts.run_diagnosis import load_prompt
 from evaluators.classifier import (
     build_classification_message,
     parse_classification,
@@ -27,18 +28,18 @@ from evaluators.classifier import (
 )
 
 
-def load_prompt_text(case_config: dict) -> str:
-    path = Path(__file__).parent.parent / case_config["prompt_file"]
-    with open(path) as f:
-        return f.read()
-
-
 def run_classification(case_id: str, results_dir: str):
     # Load configs
-    config_path = Path(__file__).parent.parent / "config" / "models.yaml"
+    root = Path(__file__).parent.parent
+    config_path = root / "config" / "models.yaml"
     with open(config_path) as f:
         config = yaml.safe_load(f)
     case_config = config["cases"][case_id]
+
+    thresholds_path = root / "config" / "thresholds.yaml"
+    with open(thresholds_path) as f:
+        thresholds = yaml.safe_load(f)
+    classifier_model = thresholds.get("classifier_model", thresholds.get("optimizer_meta_model", case_config["new_model"]))
 
     results_path = Path(results_dir)
     diagnosis = json.loads((results_path / "diagnosis_report.json").read_text())
@@ -63,7 +64,7 @@ def run_classification(case_id: str, results_dir: str):
         return report
 
     # Identify failure cases (where any score < 1.0)
-    prompt_text = load_prompt_text(case_config)
+    prompt_text = load_prompt(case_config["prompt_file"])["system_prompt"]
     client = LLMClient()
     classifications = []
 
@@ -105,10 +106,11 @@ def run_classification(case_id: str, results_dir: str):
             failure_details=failure_details,
         )
 
-        # Use a capable model for classification
+        # Use the configured meta-model for classification (defaults to the
+        # strongest available model, not tied to whichever case is running)
         response = client.complete(
-            provider="openai",
-            model="gpt-4o",
+            provider=classifier_model["provider"],
+            model=classifier_model["model"],
             system_prompt=messages[0]["content"],
             user_message=messages[1]["content"],
             temperature=0.1,
@@ -155,7 +157,7 @@ def run_classification(case_id: str, results_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 2: Classification")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "f", "g"])
     parser.add_argument("--results-dir", required=True, help="Path to Phase 1 results directory")
     args = parser.parse_args()
 

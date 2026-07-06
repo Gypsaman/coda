@@ -35,10 +35,11 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.llm_client import LLMClient
+from scripts.run_diagnosis import load_prompt
 from optimizers.router import route_and_optimize
 
 
-def quick_evaluate(client, model_config, prompt_text, test_cases, evaluator_fn) -> float:
+def quick_evaluate(client, model_config, prompt_text, tools, test_cases, evaluator_fn) -> float:
     """Run evaluation on the full test suite. Returns average score [0, 1]."""
     scores = []
     for test in test_cases:
@@ -54,6 +55,7 @@ def quick_evaluate(client, model_config, prompt_text, test_cases, evaluator_fn) 
             user_message=user_msg,
             temperature=model_config.get("temperature", 0.3),
             max_tokens=model_config.get("max_tokens", 1024),
+            tools=tools,
         )
 
         result = {
@@ -83,6 +85,7 @@ def run_optimization(case_id: str, results_dir: str):
 
     case_config = config["cases"][case_id]
     optimizer_configs = thresholds.get("optimizer_configs", {})
+    meta_model_config = thresholds.get("optimizer_meta_model", case_config["new_model"])
 
     # Load results from previous phases
     results_path = Path(results_dir)
@@ -90,14 +93,11 @@ def run_optimization(case_id: str, results_dir: str):
     new_results = json.loads((results_path / "new_model_results.json").read_text())
     baseline_results = json.loads((results_path / "baseline_results.json").read_text())
 
-    # Load original prompt
-    prompt_file = root / case_config["prompt_file"]
-    if str(prompt_file).endswith(".json"):
-        with open(prompt_file) as f:
-            current_prompt = json.load(f)["system_prompt"]
-    else:
-        with open(prompt_file) as f:
-            current_prompt = f.read()
+    # Load original prompt (reuses run_diagnosis's .txt/.json dispatch so tool
+    # schemas aren't silently dropped for JSON-origin prompts like Case B)
+    prompt_dict = load_prompt(case_config["prompt_file"])
+    current_prompt = prompt_dict["system_prompt"]
+    tools = prompt_dict.get("tools")
 
     print(f"\n{'='*60}")
     print(f"CODA Phase 3: OPTIMIZE - Case {case_id.upper()}")
@@ -141,11 +141,12 @@ def run_optimization(case_id: str, results_dir: str):
     for opt_name in optimizer_configs:
         optimizer_configs[opt_name]["failure_cases"] = failure_cases
         optimizer_configs[opt_name]["classification_summary"] = classification_summary
+        optimizer_configs[opt_name]["meta_model_config"] = meta_model_config
 
-    # Build eval_fn closure (binds client + model_config + evaluator)
+    # Build eval_fn closure (binds client + model_config + tools + evaluator)
     client = LLMClient()
     eval_fn = lambda prompt_text: quick_evaluate(
-        client, case_config["new_model"], prompt_text, test_cases, evaluator_fn
+        client, case_config["new_model"], prompt_text, tools, test_cases, evaluator_fn
     )
 
     # Dispatch to router
@@ -159,10 +160,21 @@ def run_optimization(case_id: str, results_dir: str):
         optimizer_configs=optimizer_configs,
     )
 
-    # Save optimized prompt
-    optimized_path = root / "prompts" / f"case_{case_id}_optimized.txt"
-    with open(optimized_path, "w") as f:
-        f.write(best_prompt)
+    # Save optimized prompt. Preserve the tool schema for JSON-origin prompts
+    # (e.g. Case B) instead of always writing plain text, so it survives into
+    # Phase 4 validation. Tool-calling cases also get tool_choice="required"
+    # as deterministic parameter hardening -- the schema-validation/parameter
+    # hardening step coda.md's Strategy Selection Matrix already describes for
+    # the tool-calling category, applied here as a fixed post-processing step
+    # rather than something the text-based optimizers themselves generate.
+    if str(case_config["prompt_file"]).endswith(".json"):
+        optimized_path = root / "prompts" / f"case_{case_id}_optimized.json"
+        with open(optimized_path, "w") as f:
+            json.dump({"system_prompt": best_prompt, "tools": tools, "tool_choice": "required"}, f, indent=2)
+    else:
+        optimized_path = root / "prompts" / f"case_{case_id}_optimized.txt"
+        with open(optimized_path, "w") as f:
+            f.write(best_prompt)
 
     # Save optimization log
     log_output = {
@@ -189,7 +201,7 @@ def run_optimization(case_id: str, results_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CODA Phase 3: Optimization")
-    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e"])
+    parser.add_argument("--case", required=True, choices=["a", "b", "c", "d", "e", "f", "g"])
     parser.add_argument("--results-dir", required=True)
     args = parser.parse_args()
 

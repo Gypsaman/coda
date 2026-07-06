@@ -30,10 +30,10 @@ CROSSOVER_SYSTEM_PROMPT = (
 )
 
 
-def _mutate(client: LLMClient, prompt: str, failure_hint: str) -> str:
+def _mutate(client: LLMClient, prompt: str, failure_hint: str, meta_model_config: dict) -> str:
     response = client.complete(
-        provider="openai",
-        model="gpt-4o",
+        provider=meta_model_config["provider"],
+        model=meta_model_config["model"],
         system_prompt=MUTATE_SYSTEM_PROMPT,
         user_message=f"## Prompt to Mutate\n{prompt}\n\n## Failure to Fix\n{failure_hint}",
         temperature=0.7,
@@ -42,10 +42,12 @@ def _mutate(client: LLMClient, prompt: str, failure_hint: str) -> str:
     return response["text"].strip()
 
 
-def _crossover(client: LLMClient, prompt_a: str, score_a: float, prompt_b: str, score_b: float) -> str:
+def _crossover(
+    client: LLMClient, prompt_a: str, score_a: float, prompt_b: str, score_b: float, meta_model_config: dict,
+) -> str:
     response = client.complete(
-        provider="openai",
-        model="gpt-4o",
+        provider=meta_model_config["provider"],
+        model=meta_model_config["model"],
         system_prompt=CROSSOVER_SYSTEM_PROMPT.format(score_a=score_a, score_b=score_b),
         user_message=f"## Parent A\n{prompt_a}\n\n## Parent B\n{prompt_b}",
         temperature=0.5,
@@ -80,12 +82,16 @@ def optimize(
         max_parallel_evals (int, default 5)
         classification_summary (dict) — injected at runtime
         failure_cases (list[dict]) — injected at runtime, used for mutation hints
+        meta_model_config (dict) — {provider, model} for the optimizer's own
+            reasoning calls; injected at runtime, defaults to model_config
+            (the case's target model) if absent
     """
     k = config.get("population_size", 6)
     n_gen = config.get("n_generations", 4)
     max_workers = config.get("max_parallel_evals", 5)
     classification_summary = config.get("classification_summary", {})
     failure_cases = config.get("failure_cases", [])
+    meta_model_config = config.get("meta_model_config", model_config)
 
     # Build failure hint: summary + up to 3 example cases
     failure_hint = json.dumps(classification_summary, indent=2)
@@ -99,7 +105,7 @@ def optimize(
     # Seed population: original + (k-1) APE-style diverse candidates
     print(f"\n  [EvoPrompt] Seeding population (size={k})...")
     population = [prompt] + [
-        generate_candidate(client, prompt, classification_summary, i, k, model_config)
+        generate_candidate(client, prompt, classification_summary, i, k, meta_model_config)
         for i in range(1, k)
     ]
 
@@ -115,14 +121,14 @@ def optimize(
 
         # Mutation: one offspring per individual
         print(f"    Mutating {k} individuals...")
-        offspring = [_mutate(client, ind, failure_hint) for ind in population]
+        offspring = [_mutate(client, ind, failure_hint, meta_model_config) for ind in population]
 
         # Crossover: pair adjacent individuals by descending rank
         ranked = sorted(zip(population, scores), key=lambda x: x[1], reverse=True)
         print(f"    Crossing over {len(ranked) // 2} pairs...")
         for i in range(0, len(ranked) - 1, 2):
             (pa, sa), (pb, sb) = ranked[i], ranked[i + 1]
-            offspring.append(_crossover(client, pa, sa, pb, sb))
+            offspring.append(_crossover(client, pa, sa, pb, sb, meta_model_config))
 
         # Evaluate all offspring in parallel
         print(f"    Evaluating {len(offspring)} offspring...")
