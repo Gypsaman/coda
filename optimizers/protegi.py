@@ -68,6 +68,7 @@ def generate_gradient(
         user_message=user_msg,
         temperature=0.3,
         max_tokens=1500,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
 
     text = strip_json_fences(response["text"])
@@ -93,6 +94,7 @@ def apply_edits(client: LLMClient, current_prompt: str, gradient: dict, meta_mod
         ),
         temperature=0.1,
         max_tokens=2000,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
     return response["text"].strip()
 

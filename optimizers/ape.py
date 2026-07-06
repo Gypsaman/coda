@@ -47,6 +47,7 @@ def generate_candidate(
         ),
         temperature=0.9,
         max_tokens=2000,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
     return response["text"].strip()
 

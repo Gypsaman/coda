@@ -38,6 +38,7 @@ def _mutate(client: LLMClient, prompt: str, failure_hint: str, meta_model_config
         user_message=f"## Prompt to Mutate\n{prompt}\n\n## Failure to Fix\n{failure_hint}",
         temperature=0.7,
         max_tokens=2000,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
     return response["text"].strip()
 
@@ -52,6 +53,7 @@ def _crossover(
         user_message=f"## Parent A\n{prompt_a}\n\n## Parent B\n{prompt_b}",
         temperature=0.5,
         max_tokens=2000,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
     return response["text"].strip()
 

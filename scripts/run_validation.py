@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.llm_client import LLMClient
 from scripts.run_diagnosis import EVALUATORS, load_test_suite
-from evaluators.metrics import compute_mhs, compute_ppi, get_triage_zone
+from evaluators.metrics import METRIC_MAPPING, compute_mhs, compute_ppi, get_triage_zone, map_to_weighted
 
 
 def load_optimized_prompt(optimized_path: Path) -> dict:
@@ -81,6 +81,8 @@ def run_validation(case_id: str, results_dir: str):
             max_tokens=case_config["new_model"].get("max_tokens", 1024),
             tools=tools,
             tool_choice=tool_choice,
+            reasoning_tier=case_config["new_model"].get("reasoning_tier", False),
+            enable_prompt_cache=case_config["new_model"].get("enable_prompt_cache", False),
         )
 
         result = {
@@ -112,6 +114,9 @@ def run_validation(case_id: str, results_dir: str):
             temperature=case_config["old_model"].get("temperature", 0.3),
             max_tokens=case_config["old_model"].get("max_tokens", 1024),
             tools=tools,
+            tool_choice=tool_choice,
+            reasoning_tier=case_config["old_model"].get("reasoning_tier", False),
+            enable_prompt_cache=case_config["old_model"].get("enable_prompt_cache", False),
         )
 
         result = {
@@ -143,16 +148,14 @@ def run_validation(case_id: str, results_dir: str):
     # Compute MHS/PPI
     weights = case_config["evaluator_config"]["metric_weights"]
 
-    def simple_mhs(agg):
-        """Compute MHS from aggregated scores using available metrics."""
-        available = {k: v for k, v in agg.items() if isinstance(v, (int, float))}
-        if not available:
-            return 0.0
-        return sum(available.values()) / len(available)
+    def weighted_mhs(agg):
+        """Compute MHS as the paper's weighted average, mapping granular metrics to weight categories."""
+        mapped = map_to_weighted(agg, METRIC_MAPPING, weights.keys())
+        return compute_mhs(mapped, weights)
 
-    mhs_baseline = simple_mhs(baseline_agg)
-    mhs_optimized_new = simple_mhs(new_agg)
-    mhs_regression = simple_mhs(regression_agg)
+    mhs_baseline = weighted_mhs(baseline_agg)
+    mhs_optimized_new = weighted_mhs(new_agg)
+    mhs_regression = weighted_mhs(regression_agg)
 
     ppi_optimized = compute_ppi(mhs_optimized_new, mhs_baseline) if mhs_baseline > 0 else 0
     ppi_regression = compute_ppi(mhs_regression, mhs_baseline) if mhs_baseline > 0 else 0

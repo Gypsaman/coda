@@ -115,6 +115,7 @@ def run_classification(case_id: str, results_dir: str):
             user_message=messages[1]["content"],
             temperature=0.1,
             max_tokens=500,
+            reasoning_tier=classifier_model.get("reasoning_tier", False),
         )
 
         classification = parse_classification(response["text"])

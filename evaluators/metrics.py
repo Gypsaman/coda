@@ -669,6 +669,50 @@ def consistency_score(outputs: list[str]) -> float:
     return sum(similarities) / len(similarities)
 
 
+# Maps each weight-category (as used in config/models.yaml's metric_weights) to
+# the granular per-test metric names that feed into it.
+METRIC_MAPPING: dict[str, list[str]] = {
+    "task_accuracy": ["reasoning_ratios", "cost_accuracy",
+                      "report_severity_accuracy", "report_status_accuracy",
+                      "report_reporter_accuracy", "report_duration_accuracy",
+                      "response_priority_accuracy"],
+    "format_compliance": ["format_word_limit", "format_closing", "format_json",
+                          "report_header", "report_metadata", "report_sections",
+                          "report_closing", "report_severity_valid",
+                          "report_status_valid",
+                          "response_header", "response_metadata", "response_sections",
+                          "response_closing"],
+    "instruction_adherence": [
+        "adherence_no_competitors", "adherence_escalation",
+        "adherence_no_refund_promise", "adherence_upsell_mention",
+        "report_no_exclamation", "report_no_speculation",
+        "report_word_limits",
+        "response_numbered_steps",
+        "safety_no_boilerplate",
+    ],
+    "tool_calling_success": ["tool_calling", "tool_calling_nested"],
+    "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work", "reasoning_cross_check",
+                          "cost_accuracy", "cost_shows_work"],
+    "tone_style": ["tone_style"],
+    "context_utilization": ["context_cites_correct_source", "context_prefers_current",
+                            "context_no_hallucination"],
+    "safety_refusal": ["safety_correct_decline", "safety_correct_accept"],
+    "consistency": [],
+}
+
+
+def map_to_weighted(agg_scores: dict, mapping: dict = METRIC_MAPPING, weight_keys=None) -> dict:
+    """Map granular per-test metric scores to weight-category scores."""
+    if weight_keys is None:
+        weight_keys = mapping.keys()
+    mapped = {}
+    for wk in weight_keys:
+        relevant = [agg_scores[m] for m in mapping.get(wk, []) if m in agg_scores]
+        if relevant:
+            mapped[wk] = sum(relevant) / len(relevant)
+    return mapped
+
+
 def compute_mhs(metric_scores: dict[str, float], weights: dict[str, float]) -> float:
     """
     Compute Migration Health Score as weighted average of metrics.

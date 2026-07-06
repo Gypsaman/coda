@@ -56,6 +56,8 @@ def quick_evaluate(client, model_config, prompt_text, tools, test_cases, evaluat
             temperature=model_config.get("temperature", 0.3),
             max_tokens=model_config.get("max_tokens", 1024),
             tools=tools,
+            reasoning_tier=model_config.get("reasoning_tier", False),
+            enable_prompt_cache=model_config.get("enable_prompt_cache", False),
         )
 
         result = {

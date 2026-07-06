@@ -84,9 +84,17 @@ def judge_tone_style(
         temperature=0.1,
         max_tokens=400,
         response_schema=JUDGE_RESPONSE_SCHEMA,
+        reasoning_tier=meta_model_config.get("reasoning_tier", False),
     )
     try:
         parsed = json.loads(strip_json_fences(response["text"]))
-        return normalize_judge_score(parsed["scores"]["tone_appropriateness"])
-    except (json.JSONDecodeError, KeyError):
+        scores = parsed["scores"]
+        if isinstance(scores, str):
+            # Some models occasionally emit the nested "scores" object as a
+            # JSON-encoded string within the tool call instead of a proper
+            # nested object -- decode it rather than treating it as a fatal
+            # parse failure.
+            scores = json.loads(scores)
+        return normalize_judge_score(scores["tone_appropriateness"])
+    except (json.JSONDecodeError, KeyError, TypeError):
         return 0.5  # neutral fallback if the judge output couldn't be parsed

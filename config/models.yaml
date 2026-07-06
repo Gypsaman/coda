@@ -12,7 +12,7 @@
 # a production run -- these move fast and were gathered via web search, not from
 # authoritative first-party documentation.
 #
-# Case A: Within-provider upgrade. GPT-5.5-mini -> GPT-5.5. Recalibrated with a
+# Case A: Within-provider upgrade. GPT-5.4-mini -> GPT-5.5. Recalibrated with a
 #   competing-instruction stressor (upsell rule vs. format/scope constraints) so
 #   instruction drift still manifests on a stronger new model. Expected PPI:
 #   85-94 (orange).
@@ -31,7 +31,7 @@
 #   case -- deliberately kept free of native structured-output enforcement so
 #   the migration still has something to diagnose. Expected PPI: ~100 (green).
 #
-# Case D: Cross-provider downgrade. Claude Sonnet 5 -> GPT-5.5-mini. Support
+# Case D: Cross-provider downgrade. Claude Sonnet 5 -> GPT-5.4-mini. Support
 #   ticket response writer with priority classification. Recalibrated with
 #   genuinely conflicting-signal tickets and a social-pressure variant.
 #   Optimization recovers this one (see coda.md Table 4) -- this comment
@@ -40,7 +40,7 @@
 #   of Case D and has been corrected.
 #   Expected PPI: 85-94 (orange, optimizable to green).
 #
-# Case E: Within-provider downgrade. GPT-5.5 -> GPT-5.5-mini. Incident report
+# Case E: Within-provider downgrade. GPT-5.5 -> GPT-5.4-mini. Incident report
 #   writer. Recalibrated with multi-state incident narratives (severity changes
 #   mid-incident) and duration arithmetic across windows. Format compliance and
 #   task accuracy both degrade but are recoverable via prompt optimization.
@@ -61,18 +61,18 @@
 cases:
   a:
     name: "System Prompt Migration"
-    description: "Customer service agent migrated from GPT-5.5-mini to GPT-5.5"
+    description: "Customer service agent migrated from GPT-5.4-mini to GPT-5.5"
     old_model:
       provider: openai
-      model: gpt-5.5-mini
+      model: gpt-5.4-mini
       temperature: 0.3
-      max_tokens: 300
+      max_tokens: 2000
       reasoning_tier: true
     new_model:
       provider: openai
       model: gpt-5.5
       temperature: 0.3
-      max_tokens: 300
+      max_tokens: 2000
       reasoning_tier: true
     prompt_file: prompts/case_a_original.txt
     test_suite: test_suites/case_a_tests.jsonl
@@ -115,6 +115,7 @@ cases:
       temperature: 0.2
       max_tokens: 1024
       enable_prompt_cache: true
+      reasoning_tier: true
     new_model:
       provider: anthropic
       model: claude-haiku-4-5-20251001
@@ -168,18 +169,19 @@ cases:
 
   d:
     name: "Cross-Provider Format Downgrade"
-    description: "Support response writer migrated from Claude Sonnet 5 to GPT-5.5-mini"
+    description: "Support response writer migrated from Claude Sonnet 5 to GPT-5.4-mini"
     old_model:
       provider: anthropic
       model: claude-sonnet-5
       temperature: 0.2
       max_tokens: 1024
       enable_prompt_cache: true
+      reasoning_tier: true
     new_model:
       provider: openai
-      model: gpt-5.5-mini
+      model: gpt-5.4-mini
       temperature: 0.2
-      max_tokens: 1024
+      max_tokens: 2000
       reasoning_tier: true
     prompt_file: prompts/case_d_original.txt
     test_suite: test_suites/case_d_tests.jsonl
@@ -201,18 +203,18 @@ cases:
 
   e:
     name: "Within-Provider Format Downgrade"
-    description: "Incident report writer migrated from GPT-5.5 to GPT-5.5-mini"
+    description: "Incident report writer migrated from GPT-5.5 to GPT-5.4-mini"
     old_model:
       provider: openai
       model: gpt-5.5
       temperature: 0.2
-      max_tokens: 1024
+      max_tokens: 2000
       reasoning_tier: true
     new_model:
       provider: openai
-      model: gpt-5.5-mini
+      model: gpt-5.4-mini
       temperature: 0.2
-      max_tokens: 1024
+      max_tokens: 2000
       reasoning_tier: true
     prompt_file: prompts/case_e_original.txt
     test_suite: test_suites/case_e_tests.jsonl

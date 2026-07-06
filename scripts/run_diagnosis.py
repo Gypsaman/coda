@@ -24,6 +24,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.llm_client import LLMClient
 from evaluators.metrics import (
+    METRIC_MAPPING,
+    map_to_weighted,
     format_compliance_json,
     format_compliance_max_words,
     format_compliance_ends_with,
@@ -132,6 +134,8 @@ def run_single_test(client: LLMClient, model_config: dict, prompt: dict, test_ca
         temperature=model_config.get("temperature", 0.3),
         max_tokens=model_config.get("max_tokens", 1024),
         tools=prompt.get("tools"),
+        reasoning_tier=model_config.get("reasoning_tier", False),
+        enable_prompt_cache=model_config.get("enable_prompt_cache", False),
     )
 
     return {
@@ -431,45 +435,8 @@ def run_diagnosis(case_id: str, dry_run: bool = False):
     # Compute MHS
     weights = config["evaluator_config"]["metric_weights"]
     # Map detailed scores to weight categories
-    metric_mapping = {
-        "task_accuracy": ["reasoning_ratios", "cost_accuracy",
-                          "report_severity_accuracy", "report_status_accuracy",
-                          "report_reporter_accuracy", "report_duration_accuracy",
-                          "response_priority_accuracy"],
-        "format_compliance": ["format_word_limit", "format_closing", "format_json",
-                              "report_header", "report_metadata", "report_sections",
-                              "report_closing", "report_severity_valid",
-                              "report_status_valid",
-                              "response_header", "response_metadata", "response_sections",
-                              "response_closing"],
-        "instruction_adherence": [
-            "adherence_no_competitors", "adherence_escalation",
-            "adherence_no_refund_promise", "adherence_upsell_mention",
-            "report_no_exclamation", "report_no_speculation",
-            "report_word_limits",
-            "response_numbered_steps",
-            "safety_no_boilerplate",
-        ],
-        "tool_calling_success": ["tool_calling", "tool_calling_nested"],
-        "reasoning_quality": ["reasoning_ratios", "reasoning_shows_work", "reasoning_cross_check",
-                              "cost_accuracy", "cost_shows_work"],
-        "tone_style": ["tone_style"],
-        "context_utilization": ["context_cites_correct_source", "context_prefers_current",
-                                "context_no_hallucination"],
-        "safety_refusal": ["safety_correct_decline", "safety_correct_accept"],
-        "consistency": [],
-    }
-
-    def map_to_weighted(agg_scores, mapping, weight_keys):
-        mapped = {}
-        for wk in weight_keys:
-            relevant = [agg_scores[m] for m in mapping.get(wk, []) if m in agg_scores]
-            if relevant:
-                mapped[wk] = sum(relevant) / len(relevant)
-        return mapped
-
-    baseline_mapped = map_to_weighted(baseline_agg, metric_mapping, weights.keys())
-    new_mapped = map_to_weighted(new_agg, metric_mapping, weights.keys())
+    baseline_mapped = map_to_weighted(baseline_agg, METRIC_MAPPING, weights.keys())
+    new_mapped = map_to_weighted(new_agg, METRIC_MAPPING, weights.keys())
 
     mhs_baseline = compute_mhs(baseline_mapped, weights)
     mhs_new = compute_mhs(new_mapped, weights)

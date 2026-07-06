@@ -77,9 +77,13 @@ class LLMClient:
             response_schema: JSON Schema dict. When set, the response is forced
                             into that shape and returned (as JSON text) in
                             `text`, regardless of provider.
-            reasoning_tier: True for reasoning-class OpenAI models, which take
-                            `max_completion_tokens` instead of `max_tokens` and
-                            only support default temperature.
+            reasoning_tier: True for reasoning-class models that reject a
+                            custom temperature. For OpenAI this also routes to
+                            `max_completion_tokens` instead of `max_tokens`.
+                            For Anthropic this only omits `temperature` (some
+                            current-generation Claude models return a 400
+                            "temperature is deprecated for this model" error
+                            if it's sent at all).
             enable_prompt_cache: Anthropic-only. Marks the system prompt as an
                             ephemeral cache breakpoint. Only pays off once the
                             system prompt exceeds the provider's minimum
@@ -104,7 +108,7 @@ class LLMClient:
         elif provider == "anthropic":
             result = self._complete_anthropic(
                 model, system_prompt, user_message, temperature, max_tokens,
-                tools, tool_choice, response_schema, enable_prompt_cache,
+                tools, tool_choice, response_schema, enable_prompt_cache, reasoning_tier,
             )
         elif provider == "gemini":
             result = self._complete_gemini(
@@ -181,7 +185,7 @@ class LLMClient:
 
     def _complete_anthropic(
         self, model, system_prompt, user_message, temperature, max_tokens,
-        tools, tool_choice, response_schema, enable_prompt_cache,
+        tools, tool_choice, response_schema, enable_prompt_cache, reasoning_tier,
     ) -> dict:
         system_field: Any = system_prompt
         if enable_prompt_cache:
@@ -195,9 +199,13 @@ class LLMClient:
             "model": model,
             "system": system_field,
             "messages": [{"role": "user", "content": user_message}],
-            "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        # Some current-generation Claude models reject a custom temperature
+        # entirely ("temperature is deprecated for this model") rather than
+        # silently ignoring it; reasoning_tier doubles as that signal here.
+        if not reasoning_tier:
+            kwargs["temperature"] = temperature
 
         anthropic_tools = [
             {
@@ -298,7 +306,12 @@ class LLMClient:
         text = ""
         tool_calls = []
         candidate = response.candidates[0]
-        for part in candidate.content.parts:
+        # candidate.content (or .parts) can be None if generation was cut off
+        # before emitting any content -- e.g. max_output_tokens exhausted by
+        # hidden "thinking" tokens on reasoning-capable models, or a
+        # finish_reason like SAFETY/RECITATION with no output at all.
+        parts = candidate.content.parts if candidate.content is not None else None
+        for part in (parts or []):
             if getattr(part, "text", None):
                 text += part.text
             elif getattr(part, "function_call", None):

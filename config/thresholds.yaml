@@ -66,6 +66,7 @@ taxonomy:
 optimizer_meta_model:
   provider: anthropic
   model: claude-opus-4-8
+  reasoning_tier: true  # claude-opus-4-8 rejects a custom temperature (400 error) if sent
 
 # Optional override: if unset, the classifier reuses optimizer_meta_model.
 # classifier_model:

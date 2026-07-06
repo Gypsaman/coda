@@ -72,6 +72,7 @@ def optimize(
             ),
             temperature=0.4,
             max_tokens=2000,
+            reasoning_tier=meta_model_config.get("reasoning_tier", False),
         )
         candidate = response["text"].strip()
         candidate_score = eval_fn(candidate)

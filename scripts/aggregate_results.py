@@ -13,12 +13,18 @@ Usage:
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+from evaluators.metrics import METRIC_MAPPING, compute_mhs, map_to_weighted
+
 ALL_CASES = ["a", "b", "c", "d", "e", "f", "g"]
 
 
@@ -34,7 +40,7 @@ def _load_json(path: Path) -> dict | None:
     return json.loads(path.read_text()) if path.exists() else None
 
 
-def build_row(case_id: str) -> dict | None:
+def build_row(case_id: str, weights: dict[str, float]) -> dict | None:
     results_dir = _latest_results_dir(case_id)
     if results_dir is None:
         return None
@@ -58,7 +64,8 @@ def build_row(case_id: str) -> dict | None:
         row["outcome"] = "No optimization needed"
     elif validation is not None:
         opt_metrics = validation["metrics"]["optimized_new_model"]
-        row["opt_mhs"] = sum(opt_metrics.values()) / len(opt_metrics) if opt_metrics else np.nan
+        mapped = map_to_weighted(opt_metrics, METRIC_MAPPING, weights.keys())
+        row["opt_mhs"] = compute_mhs(mapped, weights) if opt_metrics else np.nan
         row["ppi_final"] = validation["ppi_after_optimization"]
         row["outcome"] = "Recovered" if validation["status"] == "PASS" else "Failed -- optimization insufficient"
 
@@ -77,7 +84,16 @@ def to_latex_row(row: dict) -> str:
 
 
 def main(cases: list[str]):
-    rows = [r for r in (build_row(c) for c in cases) if r is not None]
+    with open(ROOT / "config" / "models.yaml") as f:
+        models_config = yaml.safe_load(f)
+
+    rows = [
+        r for r in (
+            build_row(c, models_config["cases"][c]["evaluator_config"]["metric_weights"])
+            for c in cases
+        )
+        if r is not None
+    ]
     if not rows:
         print("No results found for any requested case. Run the pipeline first.")
         return

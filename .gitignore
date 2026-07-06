@@ -7,3 +7,4 @@ ecc.pdf
 __pycache__/
 *.pyc
 coda.md
+.venv/
